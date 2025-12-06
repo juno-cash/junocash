@@ -501,7 +501,7 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-gen", strprintf(_("Generate coins (default: %u)"), DEFAULT_GENERATE));
     strUsage += HelpMessageOpt("-genproclimit=<n>", strprintf(_("Set the number of threads for coin generation if enabled (-1 = all cores, default: %d)"), DEFAULT_GENERATE_THREADS));
     strUsage += HelpMessageOpt("-equihashsolver=<name>", _("Specify the Equihash solver to be used if enabled (default: \"default\")"));
-    strUsage += HelpMessageOpt("-mineraddress=<addr>", _("Send mined coins to a specific single address"));
+    strUsage += HelpMessageOpt("-mineraddress=<addr>", _("(NOT NECESSARY) Send mined coins to a specific transparent P2PKH address (t...). A new address is generated per block if not set. Use t_getminingaddress RPC to get an address."));
     strUsage += HelpMessageOpt("-randomxfastmode", _("Use RandomX fast mode with 2GB dataset for ~2x mining speed (default: 0)"));
     strUsage += HelpMessageOpt("-minetolocalwallet", strprintf(
             _("Require that mined blocks use a coinbase address in the local wallet (default: %u)"),
@@ -1422,19 +1422,23 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     if (mapArgs.count("-mineraddress")) {
         KeyIO keyIO(chainparams);
         auto addr = keyIO.DecodePaymentAddress(mapArgs["-mineraddress"]);
-        auto consensus = chainparams.GetConsensus();
-        int height = consensus.HeightOfLatestSettledUpgrade();
-        if (chainparams.NetworkIDString() == "regtest") {
-            height = std::max(height, maxUpgradeHeight);
-        }
         if (!addr.has_value()) {
             return InitError(strprintf(
                 _("Invalid address for -mineraddress=<addr>: Unable to parse '%s' as a Juno Cash address.)"),
                 mapArgs["-mineraddress"]));
         }
-        if (!std::visit(ExtractMinerAddress(consensus, height), addr.value()).has_value()) {
+        // Reject Unified Addresses - they no longer support transparent receivers
+        if (std::holds_alternative<libzcash::UnifiedAddress>(addr.value())) {
+            return InitError(
+                _("Unified Addresses (j1...) are not supported for -mineraddress. "
+                  "Please use a transparent P2PKH address (t...). "
+                  "Note: -mineraddress is optional - junocashd will generate a new transparent address for each block if not specified."));
+        }
+        // Only allow transparent P2PKH addresses
+        if (!std::holds_alternative<CKeyID>(addr.value())) {
             return InitError(strprintf(
-                _("Invalid address for -mineraddress=<addr>: '%s' (must be a Sapling or transparent P2PKH address, or a Unified Address containing a valid receiver for the most recent settled network upgrade.)"),
+                _("Invalid address for -mineraddress=<addr>: '%s' (must be a transparent P2PKH address). "
+                  "Note: -mineraddress is optional - junocashd will generate a new transparent address for each block if not specified."),
                 mapArgs["-mineraddress"]));
         }
     }
