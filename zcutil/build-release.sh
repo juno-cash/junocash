@@ -20,13 +20,16 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Default settings
 BUILD_WINDOWS=false
 BUILD_LINUX=false
+BUILD_LINUX_DEBUG=false
 BUILD_MACOS_INTEL=false
 BUILD_MACOS_ARM=false
 BUILD_ALL=false
+BUILD_ALL_DEBUG=false
 CLEAN_BUILD=false
 CREATE_DMG=true
 USE_GITIAN=false
 FORCE_LXC=false
+GIT_REF="HEAD"
 # Pinned Debian Bullseye image for reproducible builds (glibc 2.31)
 DEBIAN_BULLSEYE_DIGEST="ee239c601913c0d3962208299eef70dcffcb7aac1787f7a02f6d3e2b518755e6"
 JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
@@ -93,10 +96,13 @@ Build JunoCash release binaries for multiple platforms.
 OPTIONS:
     -w, --windows           Build for Windows (x86_64-w64-mingw32)
     -l, --linux             Build for Linux (x86_64-pc-linux-gnu)
+    --linux-debug           Build Linux with debug symbols
     -m, --macos-intel       Build for macOS Intel (x86_64-apple-darwin)
     -a, --macos-arm         Build for macOS Apple Silicon (aarch64-apple-darwin)
     -A, --all               Build for all platforms (default if no platform specified)
+    --all-debug             Build for all platforms with debug symbols
     -g, --gitian            Use Gitian for reproducible Linux builds (glibc 2.31)
+    -t, --tag REF           Git tag/branch/commit to build (default: HEAD, for --gitian)
     --lxc                   Force LXC for Gitian (default: Docker)
     -c, --clean             Clean before building
     -j, --jobs N            Number of parallel jobs (default: $JOBS)
@@ -118,8 +124,11 @@ EXAMPLES:
     # Build macOS with custom SDK path
     $0 --macos-arm --sdk-path /path/to/SDKs
 
-    # Build reproducible Linux release with Gitian (glibc 2.28)
+    # Build reproducible Linux release with Gitian (glibc 2.31)
     $0 --linux --gitian
+
+    # Build reproducible release from a specific tag
+    $0 --linux --gitian --tag v1.0.0
 
 NOTES:
     - For macOS builds, you need to set up the SDK first. See doc/macos-sdk-setup.md
@@ -145,6 +154,9 @@ parse_args() {
             -l|--linux)
                 BUILD_LINUX=true
                 ;;
+            --linux-debug)
+                BUILD_LINUX_DEBUG=true
+                ;;
             -m|--macos-intel)
                 BUILD_MACOS_INTEL=true
                 ;;
@@ -154,8 +166,15 @@ parse_args() {
             -A|--all)
                 BUILD_ALL=true
                 ;;
+            --all-debug)
+                BUILD_ALL_DEBUG=true
+                ;;
             -g|--gitian)
                 USE_GITIAN=true
+                ;;
+            -t|--tag)
+                GIT_REF="$2"
+                shift
                 ;;
             --lxc)
                 FORCE_LXC=true
@@ -190,12 +209,15 @@ parse_args() {
         shift
     done
 
-    # If --all is specified or no specific platform, build all
-    if [ "$BUILD_ALL" = true ]; then
+    # If --all or --all-debug is specified or no specific platform, build all
+    if [ "$BUILD_ALL" = true ] || [ "$BUILD_ALL_DEBUG" = true ]; then
         BUILD_WINDOWS=true
         BUILD_LINUX=true
         BUILD_MACOS_INTEL=true
         BUILD_MACOS_ARM=true
+        if [ "$BUILD_ALL_DEBUG" = true ]; then
+            BUILD_LINUX_DEBUG=true
+        fi
     fi
 }
 
@@ -348,7 +370,8 @@ build_gitian_linux() {
         export DOCKER_IMAGE_HASH="$DEBIAN_BULLSEYE_DIGEST"
     fi
 
-    bin/gbuild --commit junocash=HEAD \
+    print_info "Building from git ref: $GIT_REF"
+    bin/gbuild --commit junocash="$GIT_REF" \
         --url junocash="$REPO_ROOT" \
         "$REPO_ROOT/contrib/gitian-descriptors/gitian-linux-parallel.yml"
 
@@ -409,19 +432,24 @@ build_all_platforms() {
 
     # Count how many platforms we're building
     [ "$BUILD_LINUX" = true ] && BUILD_COUNT=$((BUILD_COUNT + 1))
+    [ "$BUILD_LINUX_DEBUG" = true ] && BUILD_COUNT=$((BUILD_COUNT + 1))
     [ "$BUILD_WINDOWS" = true ] && BUILD_COUNT=$((BUILD_COUNT + 1))
     [ "$BUILD_MACOS_INTEL" = true ] && BUILD_COUNT=$((BUILD_COUNT + 1))
     [ "$BUILD_MACOS_ARM" = true ] && BUILD_COUNT=$((BUILD_COUNT + 1))
 
     print_info "Building $BUILD_COUNT platform(s)"
 
-    # Linux
+    # Linux (gitian builds both release and debug automatically)
     if [ "$BUILD_LINUX" = true ]; then
         if [ "$USE_GITIAN" = true ]; then
             build_gitian_linux
         else
             build_platform "Linux x86_64" "x86_64-pc-linux-gnu"
             package_release "linux-x86_64" "x86_64-pc-linux-gnu"
+            # Build debug version if requested (for non-gitian)
+            if [ "$BUILD_LINUX_DEBUG" = true ]; then
+                package_release_debug "linux-x86_64" "x86_64-pc-linux-gnu"
+            fi
         fi
     fi
 
@@ -531,6 +559,56 @@ CONFEOF
 
     cd "$REPO_ROOT"
     print_success "Package created: $ARCHIVE_NAME"
+}
+
+# Package debug symbols for a platform
+package_release_debug() {
+    local PLATFORM_NAME="$1"
+    local HOST_TRIPLET="$2"
+
+    print_info "Packaging debug symbols for $PLATFORM_NAME..."
+
+    # Create release directory
+    mkdir -p "$RELEASE_DIR"
+
+    # Create temporary packaging directory
+    local PKG_DIR="$RELEASE_DIR/junocash-${FULL_VERSION}-${PLATFORM_NAME}-debug"
+    rm -rf "$PKG_DIR"
+    mkdir -p "$PKG_DIR/bin"
+
+    # Extract debug symbols and create .dbg files
+    for binary in junocashd junocash-cli junocash-tx; do
+        if [ -f "$REPO_ROOT/src/${binary}" ]; then
+            objcopy --only-keep-debug "$REPO_ROOT/src/${binary}" "$PKG_DIR/bin/${binary}.dbg" 2>/dev/null || true
+        fi
+    done
+
+    # Also handle Rust wallet tool
+    if [ -f "$REPO_ROOT/target/release/junocashd-wallet-tool" ]; then
+        objcopy --only-keep-debug "$REPO_ROOT/target/release/junocashd-wallet-tool" "$PKG_DIR/bin/junocashd-wallet-tool.dbg" 2>/dev/null || true
+    fi
+
+    # Create archive
+    cd "$RELEASE_DIR"
+    local ARCHIVE_NAME="junocash-${FULL_VERSION}-${PLATFORM_NAME}-debug.tar.gz"
+    tar -czf "$ARCHIVE_NAME" "$(basename "$PKG_DIR")"
+
+    # Generate SHA256 checksum
+    if [ -f "SHA256SUMS.txt" ]; then
+        grep -v "$(basename "$ARCHIVE_NAME")" "SHA256SUMS.txt" > "SHA256SUMS.txt.tmp" 2>/dev/null || true
+        mv "SHA256SUMS.txt.tmp" "SHA256SUMS.txt"
+    fi
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$ARCHIVE_NAME" >> "SHA256SUMS.txt"
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$ARCHIVE_NAME" >> "SHA256SUMS.txt"
+    fi
+
+    # Clean up temp directory
+    rm -rf "$PKG_DIR"
+
+    cd "$REPO_ROOT"
+    print_success "Debug package created: $ARCHIVE_NAME"
 }
 
 # Create DMG for macOS
