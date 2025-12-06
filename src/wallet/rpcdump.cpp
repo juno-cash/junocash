@@ -879,9 +879,18 @@ UniValue z_recoverwallet(const UniValue& params, bool fHelp)
         }
     });
 
-    // Rescan blockchain from birthday height
+    // Set nTimeFirstKey to ensure proper scanning from birthday
+    // Without this, nTimeFirstKey defaults to current time from key creation,
+    // causing the scan loop to skip all historical blocks
     CBlockIndex* pindex = chainActive[birthdayHeight];
     if (pindex) {
+        if (birthdayHeight == 0) {
+            // No birthday specified, scan from genesis
+            pwalletMain->nTimeFirstKey = 1;  // 0 would be considered 'no value'
+        } else {
+            // Use birthday block's timestamp
+            pwalletMain->nTimeFirstKey = pindex->GetBlockTime();
+        }
         pwalletMain->ScanForWalletTransactions(pindex, true, true);
     }
     pwalletMain->MarkDirty();
