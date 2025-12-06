@@ -1864,6 +1864,22 @@ bool AcceptToMemoryPool(
     if (tx.IsCoinBase())
         return state.DoS(100, false, REJECT_INVALID, "coinbase");
 
+    // Juno Cash: Mempool policy - reject Orchard-to-transparent (unshielding)
+    // Note: Positive valueBalance means value is flowing OUT of Orchard
+    const auto& orchard_bundle = tx.GetOrchardBundle();
+    if (orchard_bundle.GetNumActions() > 0 && !tx.vout.empty() && orchard_bundle.GetValueBalance() > 0) {
+        return state.DoS(0, false, REJECT_NONSTANDARD, "juno-no-unshield");
+    }
+
+    // Juno Cash: Mempool policy - reject transparent-to-transparent (must shield)
+    // Exception: Coinbase transactions are allowed (already checked above)
+    if (!tx.vin.empty() && !tx.vout.empty()) {
+        // If valueBalance >= 0, funds are not going into Orchard (not shielding)
+        if (orchard_bundle.GetValueBalance() >= 0) {
+            return state.DoS(0, false, REJECT_NONSTANDARD, "juno-must-shield");
+        }
+    }
+
     // Rather not work on nonstandard transactions (unless -regtest)
     string reason;
     if (chainparams.RequireStandard() && !IsStandardTx(tx, reason, chainparams, nextBlockHeight))
