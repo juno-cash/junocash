@@ -96,6 +96,7 @@ zcash_gtest_LDADD += \
   $(EVENT_PTHREADS_LIBS) \
   $(EVENT_LIBS) \
   $(ZMQ_LIBS) \
+  $(NUMA_LIBS) \
   $(LIBRUSTZCASH) \
   $(LIBZCASH) \
   $(LIBZCASH_LIBS)

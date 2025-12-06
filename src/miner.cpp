@@ -10,6 +10,7 @@
 // Juno Cash: Legacy Equihash - kept for reference
 // #include "pow/tromp/equi_miner.h"
 #include "crypto/randomx_wrapper.h"
+#include "numa_helper.h"
 #endif
 
 #include "amount.h"
@@ -893,11 +894,21 @@ static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainpar
     return true;
 }
 
-void static BitcoinMiner(const CChainParams& chainparams)
+void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int total_threads)
 {
-    LogPrintf("JunoMonetaMiner started\n");
+    LogPrintf("JunoMonetaMiner started (thread %d/%d)\n", thread_id + 1, total_threads);
     SetThreadPriority(THREAD_PRIORITY_LOWEST);
     RenameThread("juno-miner");
+
+    // NUMA: Pin thread to CPU if available for optimal memory access on multi-socket systems
+    NumaHelper& numa = NumaHelper::GetInstance();
+    if (numa.IsNUMAAvailable()) {
+        int cpu_id = numa.GetCPUForThread(thread_id, total_threads);
+        if (cpu_id >= 0 && numa.PinCurrentThread(cpu_id)) {
+            LogPrint("numa", "NUMA: Thread %d pinned to CPU %d (node %d)\n",
+                     thread_id, cpu_id, numa.GetNodeForThread(thread_id, total_threads));
+        }
+    }
 
     // Initialize RandomX (if not already done by init.cpp)
     bool randomxFastMode = GetBoolArg("-randomxfastmode", false);
@@ -1124,9 +1135,12 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
     if (nThreads == 0 || !fGenerate)
         return;
 
+    // Initialize NUMA before spawning threads for optimal thread-to-CPU pinning
+    NumaHelper::GetInstance().Initialize();
+
     minerThreads = new boost::thread_group();
     for (int i = 0; i < nThreads; i++) {
-        minerThreads->create_thread(boost::bind(&BitcoinMiner, boost::cref(chainparams)));
+        minerThreads->create_thread(boost::bind(&BitcoinMiner, boost::cref(chainparams), i, nThreads));
     }
 }
 

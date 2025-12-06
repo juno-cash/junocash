@@ -1179,6 +1179,29 @@ else
   AC_MSG_RESULT(no)
 fi
 
+dnl NUMA support for mining optimization (Linux only)
+AC_ARG_ENABLE([numa],
+  [AS_HELP_STRING([--disable-numa],
+  [disable NUMA support for mining thread affinity (default is auto-detect)])],
+  [use_numa=$enableval],
+  [use_numa=auto])
+
+have_numa=no
+if test "x$use_numa" != "xno" -a "x$TARGET_OS" = "xlinux"; then
+  AC_CHECK_HEADER([numa.h],
+    [AC_CHECK_LIB([numa], [numa_available],
+      [have_numa=yes
+       AC_DEFINE([HAVE_NUMA], [1], [Define if libnuma is available])
+       NUMA_LIBS="-lnuma"],
+      [AC_MSG_WARN([libnuma not found, NUMA optimizations disabled])])],
+    [AC_MSG_WARN([numa.h not found, NUMA optimizations disabled])])
+  if test "x$use_numa" = "xyes" -a "x$have_numa" = "xno"; then
+    AC_MSG_ERROR([NUMA support requested but libnuma not found])
+  fi
+fi
+AC_SUBST(NUMA_LIBS)
+AM_CONDITIONAL([HAVE_NUMA], [test "x$have_numa" = "xyes"])
+
 AM_CONDITIONAL([ENABLE_ZMQ], [test "x$use_zmq" = "xyes"])
 
 AC_MSG_CHECKING([whether to build test_bitcoin])
@@ -1319,6 +1342,7 @@ echo
 echo "Options used to compile and link:"
 echo "  with wallet   = $enable_wallet"
 echo "  with zmq      = $use_zmq"
+echo "  with numa     = $have_numa"
 echo "  with test     = $use_tests"
 echo "  use asm       = $use_asm"
 echo "  sanitizers    = $use_sanitizers"

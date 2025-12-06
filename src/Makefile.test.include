@@ -148,6 +148,8 @@ if ENABLE_ZMQ
 test_test_bitcoin_LDADD += $(ZMQ_LIBS)
 endif
 
+test_test_bitcoin_LDADD += $(NUMA_LIBS)
+
 nodist_test_test_bitcoin_SOURCES = $(GENERATED_TEST_FILES)
 
 $(BITCOIN_TESTS): $(GENERATED_TEST_FILES)

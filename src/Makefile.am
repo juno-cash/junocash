@@ -283,6 +283,7 @@ BITCOIN_CORE_H = \
   net.h \
   netbase.h \
   noui.h \
+  numa_helper.h \
   policy/policy.h \
   pow.h \
   proof_verifier.h \
@@ -384,6 +385,7 @@ libbitcoin_server_a_SOURCES = \
   miner.cpp \
   net.cpp \
   noui.cpp \
+  numa_helper.cpp \
   policy/policy.cpp \
   pow.cpp \
   rest.cpp \
@@ -733,6 +735,7 @@ junocashd_LDADD += \
   $(EVENT_PTHREADS_LIBS) \
   $(EVENT_LIBS) \
   $(ZMQ_LIBS) \
+  $(NUMA_LIBS) \
   $(LIBZCASH_LIBS)
 
 # bitcoin-cli binary #
