@@ -1048,9 +1048,217 @@ static inline void IncrementNonce256_Fast(unsigned char* noncePtr) {
     ++nonce64[3];
 }
 
-void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int total_threads)
+// Classic miner: Each thread creates its own block template with unique extraNonce
+void static BitcoinMiner(const CChainParams& chainparams)
 {
-    LogPrintf("JunoMonetaMiner started (thread %d/%d)\n", thread_id + 1, total_threads);
+    LogPrintf("JunoMonetaMiner started\n");
+    SetThreadPriority(THREAD_PRIORITY_LOWEST);
+    RenameThread("juno-miner");
+
+    // Initialize RandomX (if not already done by init.cpp)
+    bool randomxFastMode = GetBoolArg("-randomxfastmode", false);
+    RandomX_Init(randomxFastMode);
+
+    // Each thread has its own counter
+    unsigned int nExtraNonce = 0;
+
+    LogPrint("pow", "Using RandomX proof-of-work algorithm\n");
+
+    std::mutex m_cs;
+    bool cancelSolver = false;
+    boost::signals2::connection c = uiInterface.NotifyBlockTip.connect(
+        [&m_cs, &cancelSolver](bool, const CBlockIndex *) mutable {
+            std::lock_guard<std::mutex> lock{m_cs};
+            cancelSolver = true;
+        }
+    );
+    miningTimer.start();
+
+    try {
+        while (true) {
+            // Get a fresh address for each block
+            std::optional<MinerAddress> maybeMinerAddress;
+            GetMainSignals().AddressForMining(maybeMinerAddress);
+
+            // Throw an error if no address valid for mining was provided.
+            if (!(maybeMinerAddress.has_value() && std::visit(IsValidMinerAddress(), maybeMinerAddress.value()))) {
+                throw std::runtime_error("No miner address available (mining requires a wallet or -mineraddress)");
+            }
+            auto minerAddress = maybeMinerAddress.value();
+
+            if (chainparams.MiningRequiresPeers()) {
+                // Busy-wait for the network to come online so we don't waste time mining
+                // on an obsolete chain. In regtest mode we expect to fly solo.
+                miningTimer.stop();
+                do {
+                    bool fvNodesEmpty;
+                    {
+                        LOCK(cs_vNodes);
+                        fvNodesEmpty = vNodes.empty();
+                    }
+                    if (!fvNodesEmpty && !IsInitialBlockDownload(chainparams.GetConsensus()))
+                        break;
+                    MilliSleep(1000);
+                } while (true);
+                miningTimer.start();
+            }
+
+            //
+            // Create new block
+            //
+            unsigned int nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
+            CBlockIndex* pindexPrev;
+            {
+                LOCK(cs_main);
+                pindexPrev = chainActive.Tip();
+            }
+
+            // If we don't have a valid chain tip to work from, wait and try again.
+            if (pindexPrev == nullptr) {
+                MilliSleep(1000);
+                continue;
+            }
+
+            unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(chainparams).CreateNewBlock(minerAddress));
+            if (!pblocktemplate.get())
+            {
+                if (GetArg("-mineraddress", "").empty()) {
+                    LogPrintf("Error in JunoCashMiner: Keypool ran out, please call keypoolrefill before restarting the mining thread\n");
+                } else {
+                    // Should never reach here, because -mineraddress validity is checked in init.cpp
+                    LogPrintf("Error in JunoCashMiner: Invalid -mineraddress\n");
+                }
+                return;
+            }
+            CBlock *pblock = &pblocktemplate->block;
+            IncrementExtraNonce(pblocktemplate.get(), pindexPrev, nExtraNonce, chainparams.GetConsensus());
+
+            LogPrintf("Running JunoMonetaMiner with %u transactions in block (%u bytes)\n", pblock->vtx.size(),
+                ::GetSerializeSize(*pblock, SER_NETWORK, PROTOCOL_VERSION));
+
+            // Calculate RandomX seed for this block height
+            uint64_t blockHeight = pindexPrev->nHeight + 1;
+            uint64_t seedHeight = RandomX_SeedHeight(blockHeight);
+            uint256 seedHash;
+
+            if (seedHeight == 0) {
+                // Genesis epoch - use genesis seed
+                seedHash.SetNull();
+                *seedHash.begin() = 0x08;
+                LogPrint("pow", "Mining block %u in genesis epoch (seed height 0)\n", blockHeight);
+            } else {
+                // Get seed block hash from chain
+                CBlockIndex* pindexSeed = chainActive[seedHeight];
+                if (!pindexSeed) {
+                    LogPrintf("Error: Could not find seed block at height %u\n", seedHeight);
+                    continue;
+                }
+                seedHash = pindexSeed->GetBlockHash();
+                LogPrint("pow", "Mining block %u with seed from height %u: %s\n",
+                         blockHeight, seedHeight, seedHash.GetHex());
+            }
+
+            // Update RandomX cache for this seed
+            RandomX_SetMainSeedHash(seedHash.begin(), 32);
+
+            //
+            // Search
+            //
+            int64_t nStart = GetTime();
+            arith_uint256 hashTarget = arith_uint256().SetCompact(pblock->nBits);
+
+            while (true) {
+                // I = the block header minus nonce and solution
+                CEquihashInput I{*pblock};
+                CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                ss << I;
+                ss << pblock->nNonce;
+
+                // Calculate RandomX hash
+                uint256 hash;
+                if (!RandomX_Hash_Block(ss.data(), ss.size(), hash)) {
+                    LogPrintf("RandomX hashing failed\n");
+                    break;
+                }
+
+                // Increment hash counter for metrics
+                ehSolverRuns.increment();
+
+                // Store the hash in nSolution (32 bytes)
+                pblock->nSolution.resize(32);
+                memcpy(pblock->nSolution.data(), hash.begin(), 32);
+
+                // Check if hash meets target
+                solutionTargetChecks.increment();
+                if (UintToArith256(hash) <= hashTarget) {
+                    // Found a solution
+                    SetThreadPriority(THREAD_PRIORITY_NORMAL);
+                    LogPrintf("JunoMonetaMiner:\n");
+                    LogPrintf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex(), hashTarget.GetHex());
+
+                    if (ProcessBlockFound(pblock, chainparams)) {
+                        // Ignore chain updates caused by us
+                        std::lock_guard<std::mutex> lock{m_cs};
+                        cancelSolver = false;
+                    }
+                    SetThreadPriority(THREAD_PRIORITY_LOWEST);
+                    std::visit(KeepMinerAddress(), minerAddress);
+
+                    // In regression test mode, stop mining after a block is found
+                    if (chainparams.MineBlocksOnDemand()) {
+                        throw boost::thread_interrupted();
+                    }
+
+                    break;
+                }
+
+                // Check for stop or if block needs to be rebuilt
+                boost::this_thread::interruption_point();
+                // Regtest mode doesn't require peers
+                if (vNodes.empty() && chainparams.MiningRequiresPeers())
+                    break;
+                if ((UintToArith256(pblock->nNonce) & 0xffff) == 0xffff)
+                    break;
+                if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nStart > 60)
+                    break;
+                if (pindexPrev != chainActive.Tip())
+                    break;
+
+                // Update nNonce and nTime
+                pblock->nNonce = ArithToUint256(UintToArith256(pblock->nNonce) + 1);
+                if (UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev) < 0)
+                    break; // Recreate the block if the clock has run backwards,
+                           // so that we can use the correct time.
+                if (chainparams.GetConsensus().nPowAllowMinDifficultyBlocksAfterHeight != std::nullopt)
+                {
+                    // Changing pblock->nTime can change work required on testnet:
+                    hashTarget.SetCompact(pblock->nBits);
+                }
+            }
+        }
+    }
+    catch (const boost::thread_interrupted&)
+    {
+        miningTimer.stop();
+        c.disconnect();
+        LogPrintf("JunoCashMiner terminated\n");
+        throw;
+    }
+    catch (const std::runtime_error &e)
+    {
+        miningTimer.stop();
+        c.disconnect();
+        LogPrintf("JunoCashMiner runtime error: %s\n", e.what());
+        return;
+    }
+    miningTimer.stop();
+    c.disconnect();
+}
+
+// Optimized miner: Shared block template with pipelined hashing
+void static BitcoinMinerOptimized(const CChainParams& chainparams, int thread_id, int total_threads)
+{
+    LogPrintf("JunoMonetaMiner (optimized) started (thread %d/%d)\n", thread_id + 1, total_threads);
     SetThreadPriority(THREAD_PRIORITY_LOWEST);
     RenameThread("juno-miner");
 
@@ -1373,6 +1581,7 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
     static boost::thread_group* minerThreads = NULL;
     static bool msr_initialized = false;
     static bool exception_handler_initialized = false;
+    static bool using_optimized_miner = false;
 
     if (nThreads < 0)
         nThreads = GetNumCores();
@@ -1384,71 +1593,89 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
         delete minerThreads;
         minerThreads = NULL;
 
-        // Stop block template updater
-        g_template_stop = true;
-        if (g_template_thread) {
-            g_template_thread->join();
-            delete g_template_thread;
-            g_template_thread = nullptr;
-        }
+        // Stop block template updater (only used by optimized miner)
+        if (using_optimized_miner) {
+            g_template_stop = true;
+            if (g_template_thread) {
+                g_template_thread->join();
+                delete g_template_thread;
+                g_template_thread = nullptr;
+            }
 
-        // Clean up MSR on shutdown
-        if (msr_initialized) {
-            RandomX_Msr::Destroy();
-            msr_initialized = false;
-        }
+            // Clean up MSR on shutdown
+            if (msr_initialized) {
+                RandomX_Msr::Destroy();
+                msr_initialized = false;
+            }
 
-        // Remove exception handlers
-        if (exception_handler_initialized) {
-            RandomX_Fix::RemoveMainLoopExceptionFrame();
-            exception_handler_initialized = false;
+            // Remove exception handlers
+            if (exception_handler_initialized) {
+                RandomX_Fix::RemoveMainLoopExceptionFrame();
+                exception_handler_initialized = false;
+            }
         }
+        using_optimized_miner = false;
     }
 
     if (nThreads == 0 || !fGenerate)
         return;
 
-    // Initialize NUMA before spawning threads for optimal thread-to-CPU pinning
-    NumaHelper::GetInstance().Initialize();
+    // Check which miner to use
+    using_optimized_miner = GetBoolArg("-useoptimizedminer", false);
 
-    // Initialize Ryzen exception handling for JIT stability
-    if (!exception_handler_initialized && GetBoolArg("-randomxexceptionhandling", true)) {
-        RandomX_Fix::SetupMainLoopExceptionFrame();
-        exception_handler_initialized = true;
-    }
+    if (using_optimized_miner) {
+        LogPrintf("Using optimized miner (shared block template)\n");
 
-    // Initialize MSR optimizations if enabled
-    if (!msr_initialized && GetBoolArg("-randomxmsr", true)) {
-        // Build list of CPU affinities for mining threads
-        std::vector<int> thread_affinities;
-        NumaHelper& numa = NumaHelper::GetInstance();
-        if (numa.IsNUMAAvailable()) {
-            for (int i = 0; i < nThreads; i++) {
-                int cpu_id = numa.GetCPUForThread(i, nThreads);
-                if (cpu_id >= 0) {
-                    thread_affinities.push_back(cpu_id);
+        // Initialize NUMA before spawning threads for optimal thread-to-CPU pinning
+        NumaHelper::GetInstance().Initialize();
+
+        // Initialize Ryzen exception handling for JIT stability
+        if (!exception_handler_initialized && GetBoolArg("-randomxexceptionhandling", true)) {
+            RandomX_Fix::SetupMainLoopExceptionFrame();
+            exception_handler_initialized = true;
+        }
+
+        // Initialize MSR optimizations if enabled
+        if (!msr_initialized && GetBoolArg("-randomxmsr", true)) {
+            // Build list of CPU affinities for mining threads
+            std::vector<int> thread_affinities;
+            NumaHelper& numa = NumaHelper::GetInstance();
+            if (numa.IsNUMAAvailable()) {
+                for (int i = 0; i < nThreads; i++) {
+                    int cpu_id = numa.GetCPUForThread(i, nThreads);
+                    if (cpu_id >= 0) {
+                        thread_affinities.push_back(cpu_id);
+                    }
                 }
+            }
+
+            // Initialize MSR with cache QoS if affinities are set
+            bool enable_cache_qos = GetBoolArg("-randomxcacheqos", true);
+            if (RandomX_Msr::Init(thread_affinities, enable_cache_qos)) {
+                LogPrintf("RandomX MSR optimizations enabled (10-15%% expected hashrate improvement)\n");
+                msr_initialized = true;
+            } else {
+                LogPrintf("RandomX MSR optimizations FAILED - mining will proceed without MSR mods\n");
+                LogPrintf("Note: MSR mods require root privileges. Run with sudo or as root for best performance.\n");
             }
         }
 
-        // Initialize MSR with cache QoS if affinities are set
-        bool enable_cache_qos = GetBoolArg("-randomxcacheqos", true);
-        if (RandomX_Msr::Init(thread_affinities, enable_cache_qos)) {
-            LogPrintf("RandomX MSR optimizations enabled (10-15%% expected hashrate improvement)\n");
-            msr_initialized = true;
-        } else {
-            LogPrintf("RandomX MSR optimizations FAILED - mining will proceed without MSR mods\n");
-            LogPrintf("Note: MSR mods require root privileges. Run with sudo or as root for best performance.\n");
+        // Start block template updater
+        g_template_stop = false;
+        g_template_thread = new boost::thread(boost::bind(&BlockTemplateUpdater, boost::cref(chainparams)));
+
+        minerThreads = new boost::thread_group();
+        for (int i = 0; i < nThreads; i++) {
+            minerThreads->create_thread(boost::bind(&BitcoinMinerOptimized, boost::cref(chainparams), i, nThreads));
         }
-    }
+    } else {
+        // Classic miner: each thread creates its own block template
+        LogPrintf("Using classic miner (per-thread block templates)\n");
 
-    // Start block template updater
-    g_template_stop = false;
-    g_template_thread = new boost::thread(boost::bind(&BlockTemplateUpdater, boost::cref(chainparams)));
-
-    minerThreads = new boost::thread_group();
-    for (int i = 0; i < nThreads; i++) {
-        minerThreads->create_thread(boost::bind(&BitcoinMiner, boost::cref(chainparams), i, nThreads));
+        minerThreads = new boost::thread_group();
+        for (int i = 0; i < nThreads; i++) {
+            minerThreads->create_thread(boost::bind(&BitcoinMiner, boost::cref(chainparams)));
+        }
     }
 }
 
