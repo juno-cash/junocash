@@ -1173,14 +1173,53 @@ int printWalletStatus()
     lines++;
 
     if (pwalletMain) {
+        // Get transparent (mined) balances
         CAmount immature = pwalletMain->GetImmatureBalance(std::nullopt);
         CAmount mature = pwalletMain->GetBalance(std::nullopt);
+
+        // Get shielded balances from account 0
+        CAmount shieldedBalance = 0;
+        CAmount shieldedUnconfirmed = 0;
+
+        {
+            LOCK2(cs_main, pwalletMain->cs_wallet);
+
+            auto selector = pwalletMain->ZTXOSelectorForAccount(0, false, TransparentCoinbasePolicy::Allow);
+            if (selector.has_value()) {
+                // Get confirmed shielded balance (minconf=1)
+                auto confirmedInputs = pwalletMain->FindSpendableInputs(selector.value(), 1, std::nullopt);
+                for (const auto& t : confirmedInputs.saplingNoteEntries) {
+                    shieldedBalance += t.note.value();
+                }
+                for (const auto& t : confirmedInputs.orchardNoteMetadata) {
+                    shieldedBalance += t.GetNoteValue();
+                }
+
+                // Get unconfirmed shielded balance (minconf=0, then subtract confirmed)
+                auto allInputs = pwalletMain->FindSpendableInputs(selector.value(), 0, std::nullopt);
+                CAmount totalShielded = 0;
+                for (const auto& t : allInputs.saplingNoteEntries) {
+                    totalShielded += t.note.value();
+                }
+                for (const auto& t : allInputs.orchardNoteMetadata) {
+                    totalShielded += t.GetNoteValue();
+                }
+                shieldedUnconfirmed = totalShielded - shieldedBalance;
+            }
+        }
+
         std::string units = Params().CurrencyUnits();
 
-        drawRow("Mature Balance", strprintf("%s %s", FormatMoney(mature), units.c_str()));
+        drawRow("Mined Mature Balance", strprintf("%s %s", FormatMoney(mature), units.c_str()));
         lines++;
-        drawRow("Immature Balance", strprintf("%s %s", FormatMoney(immature), units.c_str()));
+        drawRow("Mined Immature Balance", strprintf("%s %s", FormatMoney(immature), units.c_str()));
         lines++;
+        drawRow("Shielded Balance", strprintf("%s %s", FormatMoney(shieldedBalance), units.c_str()));
+        lines++;
+        if (shieldedUnconfirmed > 0) {
+            drawRow("Shielded Unconfirmed", strprintf("%s %s", FormatMoney(shieldedUnconfirmed), units.c_str()));
+            lines++;
+        }
 
         // Show blocks mined if any
         int blocksMined = minedBlocks.get();
@@ -3025,8 +3064,6 @@ void ThreadShowMetricsScreen()
     int64_t nRefresh = GetArg("-metricsrefreshtime", isTTY ? 1 : 600);
 
     // Header is 6 lines: box top + 3 centered lines + box bottom + blank line
-    const int HEADER_LINES = 7;  // Position to start content (row 7, line after header)
-
     if (isScreen) {
 #ifdef WIN32
         enableVTMode();
@@ -3036,15 +3073,6 @@ void ThreadShowMetricsScreen()
             enableRawMode();
         }
 #endif
-
-        // Initial screen setup: clear and draw header once
-        std::cout << "\e[2J\e[H" << std::flush;  // Clear screen and move to home
-        drawBoxTop("");
-        drawCentered("Juno Cash", "\e[1;33m");
-        drawCentered("Private Money", "\e[1;36m");
-        drawCentered(FormatFullVersion() + " - " + WhichNetwork() + " - RandomX", "\e[0;37m");
-        drawBoxBottom();
-        std::cout << std::endl;
     }
 
     while (true) {
@@ -3079,8 +3107,16 @@ void ThreadShowMetricsScreen()
         }
 
         if (isScreen) {
-            // Move to position after header (row 7) and clear rest of screen
-            std::cout << "\e[" << HEADER_LINES << ";1H\e[J" << std::flush;
+            // Clear screen and move to home - redrawing everything ensures clean resize
+            std::cout << "\e[2J\e[H" << std::flush;
+
+            // Draw header every frame
+            drawBoxTop("");
+            drawCentered("Juno Cash", "\e[1;33m");
+            drawCentered("Private Money", "\e[1;36m");
+            drawCentered(FormatFullVersion() + " - " + WhichNetwork() + " - RandomX", "\e[0;37m");
+            drawBoxBottom();
+            std::cout << std::endl;
         }
 
         // Miner status
@@ -3166,7 +3202,7 @@ void ThreadShowMetricsScreen()
                 }
             }
 
-            MilliSleep(200);
+            MilliSleep(100);
         }
 
         // Screen will be redrawn from home position at start of next loop
