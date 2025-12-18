@@ -18,6 +18,7 @@
 #include "util/moneystr.h"
 #include "util/strencodings.h"
 #include "wallet/wallet.h"
+#include "key_io.h"
 #include "crypto/randomx_wrapper.h"
 #include "hw/dmi/DmiReader.h"
 
@@ -38,6 +39,8 @@
 #include <set>
 #include <map>
 #include <mutex>
+#include <thread>
+#include <atomic>
 #ifdef WIN32
 #include <io.h>
 #include <wincon.h>
@@ -73,6 +76,9 @@ static const char* BOX_PROGRESS_FILLED = "\xe2\x96\x88"; // █ (U+2588)
 static const char* BOX_PROGRESS_EMPTY = "\xe2\x96\x91";  // ░ (U+2591)
 static const char* SYMBOL_CHECK = "\xe2\x9c\x93";        // ✓ (U+2713)
 static const char* SYMBOL_CROSS = "\xe2\x9c\x97";        // ✗ (U+2717)
+
+// Async mining stop - flag for non-blocking stop
+static std::atomic<bool> miningStopInProgress{false};
 
 void AtomicTimer::start()
 {
@@ -1602,7 +1608,8 @@ int printMiningStatus(bool mining)
         }
 
         // Line 1: Mining status, threads, donations, quit
-        std::string controls1 = strprintf("\e[1;37m[M]\e[0m Mining: \e[1;32mON\e[0m  \e[1;37m[T]\e[0m Threads: %d", nThreads);
+        std::string miningStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;32mON\e[0m";
+        std::string controls1 = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[T]\e[0m Threads: %d", miningStatus.c_str(), nThreads);
 
         int donationPct = getCurrentDonationPercentage();
         if (donationPct > 0) {
@@ -1618,17 +1625,18 @@ int printMiningStatus(bool mining)
         // Line 2: Mining mode toggles and benchmark
         bool isFastMode = RandomX_IsFastMode();
         bool hugepagesInUse = RandomX_IsUsingHugepages();
-        bool isLightMode = !isFastMode;
 
-        std::string fastStatus = isFastMode ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
-        std::string lightStatus = isLightMode ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
+        std::string modeStatus = isFastMode ? "\e[1;32mFAST\e[0m" : "\e[1;36mLIGHT\e[0m";
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
 
-        std::string controls2 = strprintf("\e[1;37m[L]\e[0m Light Mode: %s  \e[1;37m[F]\e[0m Fast Mode: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[B]\e[0m Benchmark",
-            lightStatus.c_str(), fastStatus.c_str(), hugepagesStatus.c_str());
+        std::string controls2 = strprintf("\e[1;37m[R]\e[0m RandomX: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[A]\e[0m Addresses  \e[1;37m[B]\e[0m Benchmark",
+            modeStatus.c_str(), hugepagesStatus.c_str());
         drawCentered(controls2);
     } else {
-        drawCentered("\e[1;37m[M]\e[0m Mining: \e[1;31mOFF\e[0m  \e[1;37m[Q]\e[0m Quit");
+        // Show STOPPING if mining is being stopped in background
+        std::string offStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;31mOFF\e[0m";
+        std::string controls = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[A]\e[0m Addresses  \e[1;37m[Q]\e[0m Quit", offStatus.c_str());
+        drawCentered(controls);
     }
     lines++;
 
@@ -1639,6 +1647,94 @@ int printMiningStatus(bool mining)
 #else // ENABLE_MINING
     return 0;
 #endif // !ENABLE_MINING
+}
+
+// Address panel state
+static bool showAddressesPanel = false;
+
+// Force full screen clear on next frame (used when layout changes)
+static bool forceFullClear = false;
+
+static void toggleAddressPanel()
+{
+    showAddressesPanel = !showAddressesPanel;
+}
+
+// Get first 3 unified addresses for account 0 (indices 0, 1, 2)
+static std::vector<std::string> getShieldedAddresses()
+{
+    std::vector<std::string> addresses;
+    if (!pwalletMain) return addresses;
+
+    LOCK(pwalletMain->cs_wallet);
+    KeyIO keyIO(Params());
+
+    // Find the account 0 UFVK
+    libzcash::UFVKId ufvkId;
+    bool foundAccount = false;
+    for (const auto& [acctKey, id] : pwalletMain->mapUnifiedAccountKeys) {
+        if (acctKey.second == libzcash::AccountId(0)) {
+            ufvkId = id;
+            foundAccount = true;
+            break;
+        }
+    }
+
+    if (!foundAccount) return addresses;
+
+    // Get address metadata for this UFVK
+    auto metaIt = pwalletMain->mapUfvkAddressMetadata.find(ufvkId);
+    if (metaIt == pwalletMain->mapUfvkAddressMetadata.end()) return addresses;
+
+    auto ufvkOpt = pwalletMain->GetUnifiedFullViewingKey(ufvkId);
+    if (!ufvkOpt.has_value()) return addresses;
+    auto ufvk = ufvkOpt.value();
+
+    // Get known addresses sorted by diversifier index
+    std::vector<std::pair<libzcash::diversifier_index_t, std::set<libzcash::ReceiverType>>> sortedAddrs;
+    for (const auto& [j, receiverTypes] : metaIt->second.GetKnownReceiverSetsByDiversifierIndex()) {
+        sortedAddrs.push_back({j, receiverTypes});
+    }
+
+    // Sort by diversifier index (numerically)
+    std::sort(sortedAddrs.begin(), sortedAddrs.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    // Get first 3 addresses
+    for (size_t i = 0; i < std::min(sortedAddrs.size(), size_t(3)); i++) {
+        auto addrResult = ufvk.Address(sortedAddrs[i].first, sortedAddrs[i].second);
+        auto addrPair = std::get_if<std::pair<libzcash::UnifiedAddress, libzcash::diversifier_index_t>>(&addrResult);
+        if (addrPair) {
+            addresses.push_back(keyIO.EncodePaymentAddress(addrPair->first));
+        }
+    }
+
+    return addresses;
+}
+
+static int printAddressesPanel()
+{
+    if (!showAddressesPanel) return 0;
+
+    int lines = 0;
+    drawBoxTop("SHIELDED ADDRESSES");
+    lines++;
+
+    auto addresses = getShieldedAddresses();
+
+    if (addresses.empty()) {
+        std::cout << BOX_VERTICAL << " No unified addresses (use z_getnewaccount)" << std::endl;
+        lines++;
+    } else {
+        for (size_t i = 0; i < addresses.size(); i++) {
+            std::cout << BOX_VERTICAL << " \e[1;33m" << addresses[i] << "\e[0m" << std::endl;
+            lines++;
+        }
+    }
+
+    drawBoxBottom();
+    lines++;
+    return lines;
 }
 
 
@@ -1892,21 +1988,39 @@ static void promptForPercentage(int screenHeight)
 #endif
 }
 
-// Toggle mining on/off
+static void stopMiningThreadFunc()
+{
+    // This runs in background thread - does the blocking join_all()
+    GenerateBitcoins(false, 0, Params());
+    miningStopInProgress.store(false);
+    LogPrintf("Mining threads stopped\n");
+}
+
+// Toggle mining on/off (non-blocking when stopping)
 static void toggleMining()
 {
     bool currentlyMining = GetBoolArg("-gen", false);
+
+    // If we're already stopping, don't do anything
+    if (miningStopInProgress.load()) {
+        return;
+    }
+
     mapArgs["-gen"] = currentlyMining ? "0" : "1";
 
-    int nThreads = GetArg("-genproclimit", 1);
-    GenerateBitcoins(!currentlyMining, nThreads, Params());
-
     if (!currentlyMining) {
+        // Starting mining - this is fast (just spawns threads)
+        int nThreads = GetArg("-genproclimit", 1);
+        GenerateBitcoins(true, nThreads, Params());
         SetMiningStartTime();  // Track start time for warmup display
         LogPrintf("User enabled mining with %d threads\n", nThreads);
     } else {
+        // Stopping mining - do it async to avoid blocking TUI
+        miningStopInProgress.store(true);
         miningStartTime = 0;  // Clear start time when mining stops
-        LogPrintf("User disabled mining\n");
+        LogPrintf("User disabled mining (stopping threads in background)\n");
+        std::thread stopThread(stopMiningThreadFunc);
+        stopThread.detach();  // Let it run in background
     }
 }
 
@@ -3126,9 +3240,10 @@ void ThreadShowMetricsScreen()
         if (isScreen) {
             // Periodically do a full screen clear to prevent artifact accumulation
             int64_t nNow = GetTime();
-            bool doFullClear = (nNow - nLastFullClear >= FULL_CLEAR_INTERVAL);
+            bool doFullClear = forceFullClear || (nNow - nLastFullClear >= FULL_CLEAR_INTERVAL);
             if (doFullClear) {
                 nLastFullClear = nNow;
+                forceFullClear = false;
                 // Full clear: hide cursor, clear screen, move to home
                 std::cout << "\e[?25l\e[2J\e[H" << std::flush;
             } else {
@@ -3155,6 +3270,7 @@ void ThreadShowMetricsScreen()
         if (loaded) {
             lines += printStats(metricsStats.value(), isScreen, mining);
             lines += printWalletStatus();
+            lines += printAddressesPanel();
             lines += printMiningStatus(mining);
         }
         lines += printMetrics(cols, mining);
@@ -3162,17 +3278,11 @@ void ThreadShowMetricsScreen()
         lines += printInitMessage();
 
         if (isScreen) {
-            // Explain how to exit (no newline - avoid scrolling)
-            std::cout << "[";
-#ifdef WIN32
-            std::cout << _("'junocash-cli.exe stop' to exit");
-#else
-            std::cout << _("Press Ctrl+C to exit");
-#endif
-            std::cout << "] [" << _("Set 'showmetrics=0' to hide") << "]";
+            // Footer hint (no newline - avoid scrolling)
+            std::cout << "[" << _("Set 'showmetrics=0' to hide") << "]";
             // Clear from cursor to end of screen (removes old content) and show cursor
             std::cout << "\e[J\e[?25h" << std::flush;
-            lines++; // Count the exit message line
+            lines++; // Count the footer line
         } else {
             // Print delineator
             std::cout << "----------------------------------------" << std::endl;
@@ -3186,45 +3296,64 @@ void ThreadShowMetricsScreen()
             if (isScreen && isTTY) {
                 int key = checkKeyPress();
                 if (key == 'Q' || key == 'q') {
+                    // Wait for mining stop to complete before shutdown
+                    if (miningStopInProgress.load()) {
+                        std::cout << std::endl << "Waiting for mining threads to stop..." << std::flush;
+                        while (miningStopInProgress.load()) {
+                            MilliSleep(100);
+                        }
+                        std::cout << " done." << std::endl;
+                    }
                     // Quit the daemon gracefully
                     std::cout << std::endl << "Shutting down, please wait..." << std::endl << std::endl;
                     StartShutdown();
                     return;
                 } else if (key == 'M' || key == 'm') {
                     toggleMining();
-                    break;  // Force screen refresh
+                    forceFullClear = true;
+                    break;
                 } else if (key == 'T' || key == 't') {
                     // Only allow changing threads if mining or on non-main network
                     if (mining || Params().NetworkIDString() != "main") {
                         promptForThreads(rows);
-                        break;  // Force screen refresh
+                        forceFullClear = true;
+                        break;
                     }
                 } else if (key == 'B' || key == 'b') {
                     // Toggle benchmark mode
                     if (mining) {
                         toggleBenchmark(rows);
-                        break;  // Force screen refresh
+                        forceFullClear = true;
+                        break;
                     }
+                } else if (key == 'A' || key == 'a') {
+                    toggleAddressPanel();
+                    forceFullClear = true;
+                    break;
+                } else if (key == ' ') {
+                    forceFullClear = true;
+                    break;
                 } else if (mining) {
                     // Mining mode controls only available when mining
-                    if (key == 'F' || key == 'f') {
-                        toggleFastMode();
-                        break;  // Force screen refresh
-                    } else if (key == 'L' || key == 'l') {
-                        toggleLightMode();
-                        break;  // Force screen refresh
+                    if (key == 'R' || key == 'r') {
+                        toggleFastMode();  // Toggles between LIGHT and FAST
+                        forceFullClear = true;
+                        break;
                     } else if (key == 'H' || key == 'h') {
                         toggleHugepages();
-                        break;  // Force screen refresh
+                        forceFullClear = true;
+                        break;
                     } else if (key == 'D' || key == 'd') {
                         toggleDonation();
-                        break;  // Force screen refresh
+                        forceFullClear = true;
+                        break;
                     } else if (key == 'P' || key == 'p') {
                         // Only allow changing percentage if donations are active
                         int currentPct = getCurrentDonationPercentage();
                         if (currentPct > 0) {
                             promptForPercentage(rows);
-                            break;  // Force screen refresh
+                            forceFullClear = true;
+                            break;
                         }
                     }
                 }
