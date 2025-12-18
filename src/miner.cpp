@@ -959,7 +959,7 @@ void static BlockTemplateUpdater(const CChainParams& chainparams)
             std::lock_guard<std::mutex> lock(g_template_mutex);
             if (!g_shared_template) {
                 updateNeeded = true; // First run
-                LogPrintf("BlockTemplateUpdater: First run, will create initial template\n");
+                LogPrint("miner", "BlockTemplateUpdater: First run, will create initial template\n");
             }
         }
         if (pindexCurrent != pindexPrev) {
@@ -996,39 +996,34 @@ void static BlockTemplateUpdater(const CChainParams& chainparams)
                 auto minerAddress = maybeMinerAddress.value();
                 // Create new template
                 // Note: BlockAssembler access is thread-safe (uses cs_main internally)
-                LogPrintf("BlockTemplateUpdater: About to call CreateNewBlock\n");
+                LogPrint("miner", "BlockTemplateUpdater: Creating new block template\n");
                 std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(chainparams).CreateNewBlock(minerAddress));
-                LogPrintf("BlockTemplateUpdater: CreateNewBlock returned, checking result\n");
 
-                    if (pblocktemplate) {
-                        LogPrintf("BlockTemplateUpdater: Template created successfully\n");
-                        // Update shared template
-                        std::lock_guard<std::mutex> lock(g_template_mutex);
-                        LogPrintf("BlockTemplateUpdater: Acquired mutex lock\n");
+                if (pblocktemplate) {
+                    // Update shared template with proper locking
+                    std::lock_guard<std::mutex> lock(g_template_mutex);
 
-                        // Verify we are still on the same tip before committing
-                        LogPrintf("BlockTemplateUpdater: Checking chain tip - pindexCurrent=%p, chainActive.Tip()=%p\n",
-                                 pindexCurrent, chainActive.Tip());
-                        if (chainActive.Tip() == pindexCurrent) {
-                            g_shared_template = std::move(pblocktemplate);
-                            g_template_height = pindexCurrent->nHeight + 1;
+                    // Verify we are still on the same tip before committing
+                    // Must hold cs_main to safely access chainActive
+                    LOCK(cs_main);
+                    if (chainActive.Tip() == pindexCurrent) {
+                        g_shared_template = std::move(pblocktemplate);
+                        g_template_height = pindexCurrent->nHeight + 1;
 
-                            pindexPrev = pindexCurrent;
-                            nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
-                            nLastUpdateTime = GetTime();
+                        pindexPrev = pindexCurrent;
+                        nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
+                        nLastUpdateTime = GetTime();
 
-                            LogPrintf("BlockTemplateUpdater: Updated template for height %d (%u txs)\n",
-                                     g_template_height.load(), g_shared_template->block.vtx.size());
-                        } else {
-                            LogPrintf("BlockTemplateUpdater: Chain tip changed during template creation, discarding template\n");
-                        }
+                        LogPrint("miner", "BlockTemplateUpdater: Updated template for height %d (%u txs)\n",
+                                 g_template_height.load(), g_shared_template->block.vtx.size());
                     } else {
-                        LogPrintf("BlockTemplateUpdater: CreateNewBlock returned null\n");
+                        LogPrint("miner", "BlockTemplateUpdater: Chain tip changed, discarding template\n");
                     }
+                } else {
+                    LogPrintf("BlockTemplateUpdater: CreateNewBlock returned null\n");
+                }
             } catch (const std::exception& e) {
                 LogPrintf("BlockTemplateUpdater: Error creating block template: %s\n", e.what());
-            } catch (...) {
-                LogPrintf("BlockTemplateUpdater: Unknown exception creating block template\n");
             }
         }
 
@@ -1144,35 +1139,39 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
                 ::GetSerializeSize(*pblock, SER_NETWORK, PROTOCOL_VERSION));
 
             // Calculate RandomX seed for this block height
+            // Must hold cs_main for all chainActive accesses
             CBlockIndex* pindexPrev;
+            uint256 seedHash;
+            uint64_t blockHeight = currentHeight;
+            uint64_t seedHeight = RandomX_SeedHeight(blockHeight);
             {
                 LOCK(cs_main);
                 pindexPrev = chainActive.Tip();
-            }
 
-            // Verify we are working on the correct height
-            if (!pindexPrev || pindexPrev->nHeight + 1 != currentHeight) {
-                MilliSleep(10);
-                continue;
-            }
-
-            uint64_t blockHeight = currentHeight;
-            uint64_t seedHeight = RandomX_SeedHeight(blockHeight);
-            uint256 seedHash;
-
-            if (seedHeight == 0) {
-                // Genesis epoch - use genesis seed
-                seedHash.SetNull();
-                *seedHash.begin() = 0x08;
-                LogPrint("pow", "Mining block %u in genesis epoch (seed height 0)\n", blockHeight);
-            } else {
-                // Get seed block hash from chain
-                CBlockIndex* pindexSeed = chainActive[seedHeight];
-                if (!pindexSeed) {
-                    LogPrintf("Error: Could not find seed block at height %u\n", seedHeight);
+                // Verify we are working on the correct height
+                if (!pindexPrev || pindexPrev->nHeight + 1 != currentHeight) {
+                    MilliSleep(10);
                     continue;
                 }
-                seedHash = pindexSeed->GetBlockHash();
+
+                if (seedHeight == 0) {
+                    // Genesis epoch - use genesis seed
+                    seedHash.SetNull();
+                    *seedHash.begin() = 0x08;
+                } else {
+                    // Get seed block hash from chain
+                    CBlockIndex* pindexSeed = chainActive[seedHeight];
+                    if (!pindexSeed) {
+                        LogPrintf("Error: Could not find seed block at height %u\n", seedHeight);
+                        continue;
+                    }
+                    seedHash = pindexSeed->GetBlockHash();
+                }
+            }
+
+            if (seedHeight == 0) {
+                LogPrint("pow", "Mining block %u in genesis epoch (seed height 0)\n", blockHeight);
+            } else {
                 LogPrint("pow", "Mining block %u with seed from height %u: %s\n",
                          blockHeight, seedHeight, seedHash.GetHex());
             }
@@ -1271,7 +1270,11 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
 
                         // Record block found for luck calculation
                         int64_t timeMining = GetTime() - nStart;
-                        double difficulty = GetDifficulty(chainActive.Tip());
+                        double difficulty;
+                        {
+                            LOCK(cs_main);
+                            difficulty = GetDifficulty(chainActive.Tip());
+                        }
                         double hashrate = GetLocalSolPS();
                         RecordBlockFound(timeMining, difficulty, hashrate);
                     }
@@ -1305,9 +1308,11 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
                     if (latestHeight != currentHeight) break;
 
                     // Also check other conditions that don't need per-hash checking
+                    // Note: These are intentionally lock-free for performance in the hot loop.
+                    // Races are benign - worst case is we mine a few extra iterations before restarting.
                     if (vNodes.empty() && chainparams.MiningRequiresPeers())
                         break;
-                    
+
                     if (pindexPrev != chainActive.Tip())
                         break;
                 }
