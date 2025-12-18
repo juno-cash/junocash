@@ -908,7 +908,7 @@ static void drawLine(const std::string& title, const char* left, const char* rig
     } else {
         for (int i = 0; i < width; i++) std::cout << fill;
     }
-    std::cout << right << std::endl;
+    std::cout << right << "\e[K" << std::endl;
 }
 
 // Draw top border of box
@@ -929,7 +929,7 @@ static void drawRow(const std::string& label, const std::string& value, int widt
 
     std::cout << BOX_VERTICAL << " \e[1;36m" << label << "\e[0m";
     for (int i = 0; i < padding; i++) std::cout << " ";
-    std::cout << "\e[1;33m" << value << "\e[0m " << BOX_VERTICAL << std::endl;
+    std::cout << "\e[1;33m" << value << "\e[0m " << BOX_VERTICAL << "\e[K" << std::endl;
 }
 
 // Draw a centered text line in a box
@@ -944,7 +944,7 @@ static void drawCentered(const std::string& text, const std::string& color = "",
     std::cout << text;
     if (!color.empty()) std::cout << "\e[0m";
     for (int i = 0; i < rightPad; i++) std::cout << " ";
-    std::cout << BOX_VERTICAL << std::endl;
+    std::cout << BOX_VERTICAL << "\e[K" << std::endl;
 }
 
 // Draw a progress bar
@@ -954,7 +954,7 @@ static void drawProgressBar(int percent, int width = 72) {
     for (int i = 0; i < filled; i++) std::cout << BOX_PROGRESS_FILLED;
     std::cout << "\e[0;32m";
     for (int i = filled; i < width; i++) std::cout << BOX_PROGRESS_EMPTY;
-    std::cout << "\e[0m " << BOX_VERTICAL << std::endl;
+    std::cout << "\e[0m " << BOX_VERTICAL << "\e[K" << std::endl;
 }
 
 // Draw Progress row with inline progress bar
@@ -984,7 +984,7 @@ static void drawProgressRow(double progressPercent, int64_t timeMining, int rowW
     for (int i = 0; i < filled; i++) std::cout << BOX_PROGRESS_FILLED;
     std::cout << "\e[0;32m";
     for (int i = filled; i < barWidth; i++) std::cout << BOX_PROGRESS_EMPTY;
-    std::cout << "\e[0m  \e[1;33m" << valueStr << "\e[0m " << BOX_VERTICAL << std::endl;
+    std::cout << "\e[0m  \e[1;33m" << valueStr << "\e[0m " << BOX_VERTICAL << "\e[K" << std::endl;
 }
 
 // Draw Network Difficulty row with inline meter bar showing position between historical min/max
@@ -1065,7 +1065,7 @@ static void drawDifficultyRow(double currentDifficulty, int rowWidth = 74) {
             std::cout << BOX_PROGRESS_EMPTY;
         }
     }
-    std::cout << "\e[0m  \e[1;33m" << valueStr << "\e[0m " << BOX_VERTICAL << std::endl;
+    std::cout << "\e[0m  \e[1;33m" << valueStr << "\e[0m " << BOX_VERTICAL << "\e[K" << std::endl;
 }
 
 int printStats(MetricsStats stats, bool isScreen, bool mining)
@@ -1178,33 +1178,41 @@ int printWalletStatus()
         CAmount mature = pwalletMain->GetBalance(std::nullopt);
 
         // Get shielded balances from account 0
-        CAmount shieldedBalance = 0;
-        CAmount shieldedUnconfirmed = 0;
+        // Orchard notes require 10 confirmations to be spendable
+        CAmount shieldedSpendable = 0;    // minconf >= 10 (actually spendable)
+        CAmount shieldedConfirming = 0;   // minconf 1-9 (confirmed but not yet spendable)
+        CAmount shieldedUnconfirmed = 0;  // minconf 0 (pending in mempool)
 
         {
             LOCK2(cs_main, pwalletMain->cs_wallet);
 
             auto selector = pwalletMain->ZTXOSelectorForAccount(0, false, TransparentCoinbasePolicy::Allow);
             if (selector.has_value()) {
-                // Get confirmed shielded balance (minconf=1)
-                auto confirmedInputs = pwalletMain->FindSpendableInputs(selector.value(), 1, std::nullopt);
-                for (const auto& t : confirmedInputs.saplingNoteEntries) {
-                    shieldedBalance += t.note.value();
-                }
-                for (const auto& t : confirmedInputs.orchardNoteMetadata) {
-                    shieldedBalance += t.GetNoteValue();
-                }
+                // Helper to sum shielded inputs
+                auto sumShieldedInputs = [](const SpendableInputs& inputs) {
+                    CAmount total = 0;
+                    for (const auto& t : inputs.saplingNoteEntries) {
+                        total += t.note.value();
+                    }
+                    for (const auto& t : inputs.orchardNoteMetadata) {
+                        total += t.GetNoteValue();
+                    }
+                    return total;
+                };
 
-                // Get unconfirmed shielded balance (minconf=0, then subtract confirmed)
+                // Get spendable balance (minconf=10)
+                auto spendableInputs = pwalletMain->FindSpendableInputs(selector.value(), 10, std::nullopt);
+                shieldedSpendable = sumShieldedInputs(spendableInputs);
+
+                // Get confirmed balance (minconf=1) to calculate confirming
+                auto confirmedInputs = pwalletMain->FindSpendableInputs(selector.value(), 1, std::nullopt);
+                CAmount totalConfirmed = sumShieldedInputs(confirmedInputs);
+                shieldedConfirming = totalConfirmed - shieldedSpendable;
+
+                // Get total balance (minconf=0) to calculate unconfirmed
                 auto allInputs = pwalletMain->FindSpendableInputs(selector.value(), 0, std::nullopt);
-                CAmount totalShielded = 0;
-                for (const auto& t : allInputs.saplingNoteEntries) {
-                    totalShielded += t.note.value();
-                }
-                for (const auto& t : allInputs.orchardNoteMetadata) {
-                    totalShielded += t.GetNoteValue();
-                }
-                shieldedUnconfirmed = totalShielded - shieldedBalance;
+                CAmount totalAll = sumShieldedInputs(allInputs);
+                shieldedUnconfirmed = totalAll - totalConfirmed;
             }
         }
 
@@ -1214,8 +1222,12 @@ int printWalletStatus()
         lines++;
         drawRow("Mined Immature Balance", strprintf("%s %s", FormatMoney(immature), units.c_str()));
         lines++;
-        drawRow("Shielded Balance", strprintf("%s %s", FormatMoney(shieldedBalance), units.c_str()));
+        drawRow("Shielded Balance", strprintf("%s %s", FormatMoney(shieldedSpendable), units.c_str()));
         lines++;
+        if (shieldedConfirming > 0) {
+            drawRow("Shielded Confirming", strprintf("%s %s", FormatMoney(shieldedConfirming), units.c_str()));
+            lines++;
+        }
         if (shieldedUnconfirmed > 0) {
             drawRow("Shielded Unconfirmed", strprintf("%s %s", FormatMoney(shieldedUnconfirmed), units.c_str()));
             lines++;
@@ -3063,6 +3075,11 @@ void ThreadShowMetricsScreen()
     bool isScreen = GetBoolArg("-metricsui", isTTY);
     int64_t nRefresh = GetArg("-metricsrefreshtime", isTTY ? 1 : 600);
 
+    // Track when we last did a full screen clear to prevent artifact accumulation
+    // Start at -INTERVAL to force full clear on first frame
+    const int64_t FULL_CLEAR_INTERVAL = 60; // Full clear every 60 seconds
+    int64_t nLastFullClear = GetTime() - FULL_CLEAR_INTERVAL;
+
     // Header is 6 lines: box top + 3 centered lines + box bottom + blank line
     if (isScreen) {
 #ifdef WIN32
@@ -3107,8 +3124,17 @@ void ThreadShowMetricsScreen()
         }
 
         if (isScreen) {
-            // Clear screen and move to home - redrawing everything ensures clean resize
-            std::cout << "\e[2J\e[H" << std::flush;
+            // Periodically do a full screen clear to prevent artifact accumulation
+            int64_t nNow = GetTime();
+            bool doFullClear = (nNow - nLastFullClear >= FULL_CLEAR_INTERVAL);
+            if (doFullClear) {
+                nLastFullClear = nNow;
+                // Full clear: hide cursor, clear screen, move to home
+                std::cout << "\e[?25l\e[2J\e[H" << std::flush;
+            } else {
+                // Normal update: hide cursor, move to home (no clear - reduces flicker)
+                std::cout << "\e[?25l\e[H" << std::flush;
+            }
 
             // Draw header every frame
             drawBoxTop("");
@@ -3143,7 +3169,9 @@ void ThreadShowMetricsScreen()
 #else
             std::cout << _("Press Ctrl+C to exit");
 #endif
-            std::cout << "] [" << _("Set 'showmetrics=0' to hide") << "]" << std::flush;
+            std::cout << "] [" << _("Set 'showmetrics=0' to hide") << "]";
+            // Clear from cursor to end of screen (removes old content) and show cursor
+            std::cout << "\e[J\e[?25h" << std::flush;
             lines++; // Count the exit message line
         } else {
             // Print delineator
