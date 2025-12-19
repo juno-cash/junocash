@@ -168,12 +168,12 @@ darwin-cargo-compat:
 	fi
 	$(AT)if [ ! -e $(host_prefix)/native/bin/$(rust_target_triple)-cc ]; then \
 		echo "Creating compiler wrapper $(rust_target_triple)-cc"; \
-		printf '#!/bin/sh\nexec %s --sysroot %s "$$@"\n' "$(xcrun -f clang)" "$(xcrun --show-sdk-path)" > $(host_prefix)/native/bin/$(rust_target_triple)-cc; \
+		printf '#!/bin/sh\nexec %s --sysroot %s "$@"\n' "$(xcrun -f clang)" "$(xcrun --show-sdk-path)" > $(host_prefix)/native/bin/$(rust_target_triple)-cc; \
 		chmod +x $(host_prefix)/native/bin/$(rust_target_triple)-cc; \
 	fi
 	$(AT)if [ ! -e $(host_prefix)/native/bin/$(rust_target_triple)-cxx ]; then \
 		echo "Creating compiler wrapper $(rust_target_triple)-cxx"; \
-		printf '#!/bin/sh\nexec %s --sysroot %s "$$@"\n' "$(xcrun -f clang++)" "$(xcrun --show-sdk-path)" > $(host_prefix)/native/bin/$(rust_target_triple)-cxx; \
+		printf '#!/bin/sh\nexec %s --sysroot %s "$@"\n' "$(xcrun -f clang++)" "$(xcrun --show-sdk-path)" > $(host_prefix)/native/bin/$(rust_target_triple)-cxx; \
 		chmod +x $(host_prefix)/native/bin/$(rust_target_triple)-cxx; \
 	fi
 .PHONY: darwin-cargo-compat
