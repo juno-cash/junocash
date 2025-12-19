@@ -35,10 +35,14 @@ endef
 define $(package)_preprocess_cmds
   cp $($(package)_patch_dir)/Cargo.lock . && \
   mkdir -p .cargo && \
-  echo "[source.crates-io]" >.cargo/config && \
-  echo "replace-with = \"vendored-sources\"" >>.cargo/config && \
-  echo "[source.vendored-sources]" >>.cargo/config && \
-  echo "directory = \"$(CRATE_REGISTRY)\"" >>.cargo/config
+  echo "[source.crates-io]" >.cargo/config.toml && \
+  echo "replace-with = \"vendored-sources\"" >>.cargo/config.toml && \
+  echo "[source.vendored-sources]" >>.cargo/config.toml && \
+  echo "directory = \"$(CRATE_REGISTRY)\"" >>.cargo/config.toml && \
+  echo "[target.aarch64-apple-darwin]" >>.cargo/config.toml && \
+  echo 'linker = "clang"' >>.cargo/config.toml && \
+  echo "[target.x86_64-apple-darwin]" >>.cargo/config.toml && \
+  echo 'linker = "clang"' >>.cargo/config.toml
 endef
 
 define $(package)_build_cmds

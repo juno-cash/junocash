@@ -297,6 +297,45 @@ clean_build() {
 build_gitian_linux() {
     print_step "Building Linux with Gitian (reproducible, glibc 2.31)"
 
+    # Check for Windows (non-WSL) - Gitian requires a Unix environment
+    local HOST_OS
+    HOST_OS=$(uname -s)
+    case "$HOST_OS" in
+        MINGW*|MSYS*|CYGWIN*)
+            print_error "Gitian cannot run on Windows ($HOST_OS)."
+            print_error "Gitian requires a native Unix environment with Docker or LXC."
+            print_error ""
+            print_error "Options:"
+            print_error "  - Use WSL2: Run this script from within WSL2 (Ubuntu recommended)"
+            print_error "  - Use a Linux VM or machine"
+            print_error "  - Use './zcutil/build-release.sh --linux' for non-reproducible cross-compile"
+            exit 1
+            ;;
+    esac
+
+    # Check for ARM architecture - Gitian builds amd64 containers which require
+    # slow QEMU emulation on ARM and may produce non-reproducible results
+    local HOST_ARCH
+    HOST_ARCH=$(uname -m)
+    if [ "$HOST_ARCH" = "arm64" ] || [ "$HOST_ARCH" = "aarch64" ]; then
+        print_warn "Gitian builds amd64 Linux binaries but you're on ARM ($HOST_ARCH)."
+        print_warn "This requires QEMU emulation which is:"
+        print_warn "  - Very slow (3-10x longer build times)"
+        print_warn "  - May produce non-reproducible results"
+        print_warn "  - May fail due to emulation bugs"
+        print_warn ""
+        print_warn "Recommended alternatives:"
+        print_warn "  - Use an x86_64 Linux machine or VM"
+        print_warn "  - Use './zcutil/build-release.sh --linux' without -g for local builds"
+        print_warn ""
+        read -p "Continue anyway? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Aborting Gitian build."
+            exit 0
+        fi
+    fi
+
     cd "$REPO_ROOT"
 
     # Check for gitian-builder
@@ -446,10 +485,10 @@ build_all_platforms() {
             build_gitian_linux
         else
             build_platform "Linux x86_64" "x86_64-pc-linux-gnu"
-            package_release "linux-x86_64" "x86_64-pc-linux-gnu"
+            package_release "linux64" "x86_64-pc-linux-gnu"
             # Build debug version if requested (for non-gitian)
             if [ "$BUILD_LINUX_DEBUG" = true ]; then
-                package_release_debug "linux-x86_64" "x86_64-pc-linux-gnu"
+                package_release_debug "linux64" "x86_64-pc-linux-gnu"
             fi
         fi
     fi
@@ -463,7 +502,7 @@ build_all_platforms() {
     # macOS Intel
     if [ "$BUILD_MACOS_INTEL" = true ]; then
         build_platform "macOS x86_64 (Intel)" "x86_64-apple-darwin18" "SDK_PATH=$SDK_PATH"
-        package_release "macos-x86_64" "x86_64-apple-darwin18"
+        package_release "macos-intel" "x86_64-apple-darwin18"
     fi
 
     # macOS Apple Silicon

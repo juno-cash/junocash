@@ -154,6 +154,31 @@ $(host_prefix)/share/config.site : config.site.in $(host_prefix)/.stamp_$(final_
             -e 's|@debug@|$(DEBUG)|' \
             $< > $@
 	$(AT)touch $@
+# For native Darwin builds, create symlinks and compiler wrappers needed by Cargo.
+# The Rust target (e.g., aarch64-apple-darwin) differs from the full host triple
+# (e.g., aarch64-apple-darwin25.1.0), so we create compatibility symlinks.
+ifeq ($(host_os),darwin)
+rust_target_triple:=$(call rust_target,native_rust,$(canonical_host),$(host_os))
+ifneq ($(rust_target_triple),$(host))
+$(host_prefix)/share/config.site: | darwin-cargo-compat
+darwin-cargo-compat:
+	$(AT)if [ ! -e $(BASEDIR)/$(rust_target_triple) ]; then \
+		echo "Creating symlink $(rust_target_triple) -> $(host)"; \
+		ln -sfn $(host) $(BASEDIR)/$(rust_target_triple); \
+	fi
+	$(AT)if [ ! -e $(host_prefix)/native/bin/$(rust_target_triple)-cc ]; then \
+		echo "Creating compiler wrapper $(rust_target_triple)-cc"; \
+		printf '#!/bin/sh\nexec %s --sysroot %s "$$@"\n' "$(xcrun -f clang)" "$(xcrun --show-sdk-path)" > $(host_prefix)/native/bin/$(rust_target_triple)-cc; \
+		chmod +x $(host_prefix)/native/bin/$(rust_target_triple)-cc; \
+	fi
+	$(AT)if [ ! -e $(host_prefix)/native/bin/$(rust_target_triple)-cxx ]; then \
+		echo "Creating compiler wrapper $(rust_target_triple)-cxx"; \
+		printf '#!/bin/sh\nexec %s --sysroot %s "$$@"\n' "$(xcrun -f clang++)" "$(xcrun --show-sdk-path)" > $(host_prefix)/native/bin/$(rust_target_triple)-cxx; \
+		chmod +x $(host_prefix)/native/bin/$(rust_target_triple)-cxx; \
+	fi
+.PHONY: darwin-cargo-compat
+endif
+endif
 
 
 define check_or_remove_cached
