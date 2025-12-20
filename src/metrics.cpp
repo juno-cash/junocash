@@ -1625,8 +1625,14 @@ int printMiningStatus(bool mining)
         // Line 2: Mining mode toggles and benchmark
         bool isFastMode = RandomX_IsFastMode();
         bool hugepagesInUse = RandomX_IsUsingHugepages();
+        bool buildingDataset = RandomX_IsBuildingDataset();
 
-        std::string modeStatus = isFastMode ? "\e[1;32mFAST\e[0m" : "\e[1;36mLIGHT\e[0m";
+        std::string modeStatus;
+        if (buildingDataset) {
+            modeStatus = "\e[1;33mBUILDING...\e[0m";
+        } else {
+            modeStatus = isFastMode ? "\e[1;32mFAST\e[0m" : "\e[1;36mLIGHT\e[0m";
+        }
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
 
         std::string controls2 = strprintf("\e[1;37m[R]\e[0m RandomX: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[A]\e[0m Addresses  \e[1;37m[B]\e[0m Benchmark",

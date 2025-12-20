@@ -1813,7 +1813,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 // Auto-enable fast mode for miners unless explicitly disabled
                 bool miningEnabled = GetBoolArg("-gen", false);
                 bool randomxFastMode;
-                if (IsArgSet("-randomxfastmode")) {
+                if (mapArgs.count("-randomxfastmode")) {
                     // User explicitly set the mode
                     randomxFastMode = GetBoolArg("-randomxfastmode", false);
                 } else {

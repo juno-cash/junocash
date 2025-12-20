@@ -1070,7 +1070,7 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
     // Initialize RandomX (if not already done by init.cpp)
     // Mining always defaults to fast mode unless user explicitly disabled it
     bool randomxFastMode;
-    if (IsArgSet("-randomxfastmode")) {
+    if (mapArgs.count("-randomxfastmode")) {
         randomxFastMode = GetBoolArg("-randomxfastmode", false);
     } else {
         randomxFastMode = true;  // Default to fast mode for mining

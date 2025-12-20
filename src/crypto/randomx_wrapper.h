@@ -142,6 +142,12 @@ bool RandomX_IsFastMode();
 bool RandomX_IsUsingHugepages();
 
 /**
+ * Check if RandomX is currently building a dataset.
+ * @return true if dataset initialization is in progress, false otherwise.
+ */
+bool RandomX_IsBuildingDataset();
+
+/**
  * Change RandomX mode at runtime without full shutdown/reinit.
  * This is safe to call while mining - threads will automatically
  * recreate their VMs with the new mode settings.
