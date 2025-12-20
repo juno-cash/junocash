@@ -360,7 +360,14 @@ void RandomX_Init(bool fastMode, bool useHugePages)
     rx_shutting_down = false;
 
     if (rx_initialized.exchange(true)) {
-        return;  // Already initialized
+        // Already initialized - but update mode if different
+        if (fastMode != rx_fast_mode) {
+            LogPrintf("RandomX: Switching to %s mode\n",
+                      fastMode ? "FAST (2GB dataset)" : "light (256MB cache)");
+            rx_fast_mode = fastMode;
+            rx_use_hugepages = useHugePages;
+        }
+        return;
     }
 
     // Detect CPU features

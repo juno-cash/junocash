@@ -2043,6 +2043,9 @@ static void toggleFastMode()
         // Switching to Light Mode
         LogPrintf("User switching to Light Mode\n");
 
+        // Record user's explicit choice so miner thread respects it
+        mapArgs["-randomxfastmode"] = "0";
+
         // Stop mining
         GenerateBitcoins(false, 0, Params());
         MilliSleep(500);
@@ -2062,6 +2065,9 @@ static void toggleFastMode()
     } else {
         // Switching to Fast Mode
         LogPrintf("User switching to Fast Mode\n");
+
+        // Record user's explicit choice so miner thread respects it
+        mapArgs["-randomxfastmode"] = "1";
 
         // Stop mining
         GenerateBitcoins(false, 0, Params());
