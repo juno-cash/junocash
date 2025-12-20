@@ -1068,7 +1068,14 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
     }
 
     // Initialize RandomX (if not already done by init.cpp)
-    bool randomxFastMode = GetBoolArg("-randomxfastmode", false);
+    // Mining always defaults to fast mode unless user explicitly disabled it
+    bool randomxFastMode;
+    if (IsArgSet("-randomxfastmode")) {
+        randomxFastMode = GetBoolArg("-randomxfastmode", false);
+    } else {
+        randomxFastMode = true;  // Default to fast mode for mining
+        LogPrintf("RandomX: Auto-enabling fast mode for mining\n");
+    }
     RandomX_Init(randomxFastMode);
 
     // Each thread has its own counter

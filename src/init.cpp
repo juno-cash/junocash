@@ -502,7 +502,7 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-genproclimit=<n>", strprintf(_("Set the number of threads for coin generation if enabled (-1 = all cores, default: %d)"), DEFAULT_GENERATE_THREADS));
     strUsage += HelpMessageOpt("-equihashsolver=<name>", _("Specify the Equihash solver to be used if enabled (default: \"default\")"));
     strUsage += HelpMessageOpt("-mineraddress=<addr>", _("(NOT NECESSARY) Send mined coins to a specific transparent P2PKH address (t...). A new address is generated per block if not set. Use t_getminingaddress RPC to get an address."));
-    strUsage += HelpMessageOpt("-randomxfastmode", _("Use RandomX fast mode with 2GB dataset for ~2x mining speed (default: 0)"));
+    strUsage += HelpMessageOpt("-randomxfastmode", _("Use RandomX fast mode with 2GB dataset for ~2x mining speed (default: auto-enabled when -gen=1, otherwise 0)"));
     strUsage += HelpMessageOpt("-randomxmsr", _("Enable MSR (Model Specific Register) optimizations for 10-15% hashrate improvement (default: 1, requires setup-msr-permissions.sh)"));
     strUsage += HelpMessageOpt("-randomxcacheqos", _("Enable L3 cache QoS allocation for mining threads, 2-5% additional improvement (default: 1, requires -randomxmsr=1)"));
     strUsage += HelpMessageOpt("-randomxexceptionhandling", _("Enable Ryzen JIT exception handling for stability (default: 1)"));
@@ -1810,7 +1810,19 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
                 // Juno Cash: Initialize RandomX before loading block index
                 // This is required for PoW validation during LoadBlockIndex
-                bool randomxFastMode = GetBoolArg("-randomxfastmode", false);
+                // Auto-enable fast mode for miners unless explicitly disabled
+                bool miningEnabled = GetBoolArg("-gen", false);
+                bool randomxFastMode;
+                if (IsArgSet("-randomxfastmode")) {
+                    // User explicitly set the mode
+                    randomxFastMode = GetBoolArg("-randomxfastmode", false);
+                } else {
+                    // Auto-detect: fast mode for miners, light mode for non-miners
+                    randomxFastMode = miningEnabled;
+                    if (miningEnabled) {
+                        LogPrintf("RandomX: Auto-enabling fast mode for mining (use -randomxfastmode=0 to override)\n");
+                    }
+                }
                 bool randomxHugePages = GetBoolArg("-randomxhugepages", false);
                 RandomX_Init(randomxFastMode, randomxHugePages);
 
