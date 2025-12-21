@@ -80,6 +80,12 @@ static const char* SYMBOL_CROSS = "\xe2\x9c\x97";        // ✗ (U+2717)
 // Async mining stop - flag for non-blocking stop
 static std::atomic<bool> miningStopInProgress{false};
 
+// Shielding in progress - prevents repeated keypresses
+static std::atomic<bool> shieldingInProgress{false};
+
+// Track if there are shieldable coins (mature transparent balance > 0)
+static std::atomic<bool> hasShieldableCoins{false};
+
 void AtomicTimer::start()
 {
     std::unique_lock<std::mutex> lock(mtx);
@@ -1189,6 +1195,9 @@ int printWalletStatus()
         CAmount immature = pwalletMain->GetImmatureBalance(std::nullopt);
         CAmount mature = pwalletMain->GetBalance(std::nullopt);
 
+        // Update hasShieldableCoins flag for controls display
+        hasShieldableCoins.store(mature > 0);
+
         // Get shielded balances from account 0
         // Orchard notes require 10 confirmations to be spendable
         CAmount shieldedSpendable = 0;    // minconf >= 10 (actually spendable)
@@ -1225,6 +1234,11 @@ int printWalletStatus()
                 auto allInputs = pwalletMain->FindSpendableInputs(selector.value(), 0, std::nullopt);
                 CAmount totalAll = sumShieldedInputs(allInputs);
                 shieldedUnconfirmed = totalAll - totalConfirmed;
+
+                // Clear shielding flag when unconfirmed balance becomes 0
+                if (shieldedUnconfirmed == 0 && shieldingInProgress.load()) {
+                    shieldingInProgress.store(false);
+                }
             }
         }
 
@@ -1671,14 +1685,26 @@ int printMiningStatus(bool mining)
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
 
         std::string addrLabel = expandJ1Address ? "Collapse" : "Expand";
-        std::string controls2 = strprintf("\e[1;37m[R]\e[0m RandomX: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[A]\e[0m %s  \e[1;37m[B]\e[0m Benchmark",
-            modeStatus.c_str(), hugepagesStatus.c_str(), addrLabel.c_str());
+        bool showShield = hasShieldableCoins.load() || shieldingInProgress.load();
+        std::string shieldPart = "";
+        if (showShield) {
+            std::string shieldLabel = shieldingInProgress.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
+            shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
+        }
+        std::string controls2 = strprintf("\e[1;37m[R]\e[0m RandomX: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[A]\e[0m %s%s  \e[1;37m[B]\e[0m Benchmark",
+            modeStatus.c_str(), hugepagesStatus.c_str(), addrLabel.c_str(), shieldPart.c_str());
         drawCentered(controls2);
     } else {
         // Show STOPPING if mining is being stopped in background
         std::string offStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;31mOFF\e[0m";
         std::string addrLabel = expandJ1Address ? "Collapse" : "Expand";
-        std::string controls = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[A]\e[0m %s  \e[1;37m[Q]\e[0m Quit", offStatus.c_str(), addrLabel.c_str());
+        bool showShield = hasShieldableCoins.load() || shieldingInProgress.load();
+        std::string shieldPart = "";
+        if (showShield) {
+            std::string shieldLabel = shieldingInProgress.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
+            shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
+        }
+        std::string controls = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[A]\e[0m %s%s  \e[1;37m[Q]\e[0m Quit", offStatus.c_str(), addrLabel.c_str(), shieldPart.c_str());
         drawCentered(controls);
     }
     lines++;
@@ -1699,6 +1725,103 @@ static void toggleAddressExpansion()
 {
     expandJ1Address = !expandJ1Address;
     forceFullClear = true;
+}
+
+// Shield coinbase UTXOs to the default j1 address
+static void shieldCoinbase(int rows)
+{
+    // Prevent repeated keypresses while shielding
+    if (shieldingInProgress.load()) {
+        return;
+    }
+
+    if (!pwalletMain) {
+        std::cout << "\r\e[K\e[1;31mError: Wallet not available\e[0m" << std::flush;
+        MilliSleep(2000);
+        return;
+    }
+
+    // Check for unconfirmed shielded balance (previous shield still processing)
+    {
+        LOCK2(cs_main, pwalletMain->cs_wallet);
+        auto selector = pwalletMain->ZTXOSelectorForAccount(0, false, TransparentCoinbasePolicy::Allow);
+        if (selector.has_value()) {
+            auto allInputs = pwalletMain->FindSpendableInputs(selector.value(), 0, std::nullopt);
+            auto confirmedInputs = pwalletMain->FindSpendableInputs(selector.value(), 1, std::nullopt);
+
+            CAmount totalAll = 0, totalConfirmed = 0;
+            for (const auto& t : allInputs.orchardNoteMetadata) totalAll += t.GetNoteValue();
+            for (const auto& t : confirmedInputs.orchardNoteMetadata) totalConfirmed += t.GetNoteValue();
+
+            if (totalAll > totalConfirmed) {
+                std::cout << "\r\e[K\e[1;33mWaiting for previous shield to confirm...\e[0m" << std::flush;
+                MilliSleep(2000);
+                return;
+            }
+        }
+    }
+
+    // Get the default j1 address
+    auto addresses = getShieldedAddresses();
+    if (addresses.empty()) {
+        std::cout << "\r\e[K\e[1;31mError: No shielded address available\e[0m" << std::flush;
+        MilliSleep(2000);
+        return;
+    }
+
+    std::string toAddress = addresses[0];
+
+    // Set shielding flag
+    shieldingInProgress.store(true);
+
+    // Show shielding message
+    std::cout << "\r\e[K\e[1;33mShielding coinbase to " << toAddress.substr(0, 20) << "...\e[0m" << std::flush;
+
+    try {
+        // Build RPC parameters: z_shieldcoinbase "*" "j1address..."
+        UniValue params(UniValue::VARR);
+        params.push_back("*");
+        params.push_back(toAddress);
+
+        // Call the RPC function via tableRPC
+        const CRPCCommand* cmd = tableRPC["z_shieldcoinbase"];
+        if (!cmd) {
+            std::cout << "\r\e[K\e[1;31mError: RPC command not found\e[0m" << std::flush;
+            shieldingInProgress.store(false);
+            MilliSleep(2000);
+            return;
+        }
+
+        UniValue result = cmd->actor(params, false);
+
+        // Extract operation info from result
+        int shieldingUTXOs = find_value(result, "shieldingUTXOs").get_int();
+        double shieldingValue = find_value(result, "shieldingValue").get_real();
+        int remainingUTXOs = find_value(result, "remainingUTXOs").get_int();
+        std::string opid = find_value(result, "opid").get_str();
+
+        if (shieldingUTXOs == 0) {
+            std::cout << "\r\e[K\e[1;33mNo coinbase UTXOs to shield\e[0m" << std::flush;
+            shieldingInProgress.store(false);
+        } else {
+            std::cout << "\r\e[K\e[1;32mShielding " << shieldingUTXOs << " UTXOs ("
+                      << FormatMoney(shieldingValue * COIN) << " JUNO)"
+                      << (remainingUTXOs > 0 ? strprintf(" - %d remaining", remainingUTXOs) : "")
+                      << "\e[0m" << std::flush;
+            // Keep shieldingInProgress true until unconfirmed balance clears
+        }
+        MilliSleep(2000);
+
+    } catch (const UniValue& e) {
+        std::string errMsg = find_value(e, "message").get_str();
+        std::cout << "\r\e[K\e[1;31mError: " << errMsg << "\e[0m" << std::flush;
+        shieldingInProgress.store(false);
+        MilliSleep(3000);
+    } catch (const std::exception& e) {
+        std::cout << "\r\e[K\e[1;31mError: " << e.what() << "\e[0m" << std::flush;
+        shieldingInProgress.store(false);
+        MilliSleep(3000);
+    }
 }
 
 // Get first 3 unified addresses for account 0 (indices 0, 1, 2)
@@ -3351,6 +3474,13 @@ void ThreadShowMetricsScreen()
                 } else if (key == 'A' || key == 'a') {
                     toggleAddressExpansion();
                     break;
+                } else if (key == 'S' || key == 's') {
+                    // Only process if there are shieldable coins or shielding in progress
+                    if (hasShieldableCoins.load() || shieldingInProgress.load()) {
+                        shieldCoinbase(rows);
+                        forceFullClear = true;
+                        break;
+                    }
                 } else if (key == ' ') {
                     forceFullClear = true;
                     break;
