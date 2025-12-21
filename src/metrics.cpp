@@ -1170,6 +1170,12 @@ int printStats(MetricsStats stats, bool isScreen, bool mining)
 static int getCurrentDonationPercentage();
 static std::string getCurrentDonationAddress();
 
+// Forward declarations for address display
+static std::vector<std::string> getShieldedAddresses();
+
+// Address display state - controls whether j1 address is expanded or truncated
+static bool expandJ1Address = false;
+
 int printWalletStatus()
 {
     int lines = 0;
@@ -1263,6 +1269,33 @@ int printWalletStatus()
             }
 
             drawRow("Blocks Mined", strprintf("%d (orphaned: %d)", blocksMined, orphaned));
+            lines++;
+        }
+
+        // Default Mining Address (t1...)
+        if (pwalletMain->vchDefaultKey.IsValid()) {
+            KeyIO keyIO(Params());
+            std::string minerAddr = keyIO.EncodeDestination(pwalletMain->vchDefaultKey.GetID());
+            drawRow("Miner Address", minerAddr);
+            lines++;
+        }
+
+        // Default Unified Address (j1...)
+        auto addresses = getShieldedAddresses();
+        if (!addresses.empty()) {
+            std::string j1Addr = addresses[0];  // First unified address (diversifier 0)
+            std::string displayAddr;
+            if (expandJ1Address) {
+                displayAddr = j1Addr;  // Full address
+            } else {
+                // Truncate: first 12 + "..." + last 12
+                if (j1Addr.length() > 27) {
+                    displayAddr = j1Addr.substr(0, 12) + "..." + j1Addr.substr(j1Addr.length() - 12);
+                } else {
+                    displayAddr = j1Addr;
+                }
+            }
+            drawRow("Shielded Addr", displayAddr);
             lines++;
         }
     } else {
@@ -1635,13 +1668,15 @@ int printMiningStatus(bool mining)
         }
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
 
-        std::string controls2 = strprintf("\e[1;37m[R]\e[0m RandomX: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[A]\e[0m Addresses  \e[1;37m[B]\e[0m Benchmark",
-            modeStatus.c_str(), hugepagesStatus.c_str());
+        std::string addrLabel = expandJ1Address ? "Collapse" : "Expand";
+        std::string controls2 = strprintf("\e[1;37m[R]\e[0m RandomX: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[A]\e[0m %s  \e[1;37m[B]\e[0m Benchmark",
+            modeStatus.c_str(), hugepagesStatus.c_str(), addrLabel.c_str());
         drawCentered(controls2);
     } else {
         // Show STOPPING if mining is being stopped in background
         std::string offStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;31mOFF\e[0m";
-        std::string controls = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[A]\e[0m Addresses  \e[1;37m[Q]\e[0m Quit", offStatus.c_str());
+        std::string addrLabel = expandJ1Address ? "Collapse" : "Expand";
+        std::string controls = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[A]\e[0m %s  \e[1;37m[Q]\e[0m Quit", offStatus.c_str(), addrLabel.c_str());
         drawCentered(controls);
     }
     lines++;
@@ -1655,15 +1690,13 @@ int printMiningStatus(bool mining)
 #endif // !ENABLE_MINING
 }
 
-// Address panel state
-static bool showAddressesPanel = false;
-
 // Force full screen clear on next frame (used when layout changes)
 static bool forceFullClear = false;
 
-static void toggleAddressPanel()
+static void toggleAddressExpansion()
 {
-    showAddressesPanel = !showAddressesPanel;
+    expandJ1Address = !expandJ1Address;
+    forceFullClear = true;
 }
 
 // Get first 3 unified addresses for account 0 (indices 0, 1, 2)
@@ -1718,30 +1751,6 @@ static std::vector<std::string> getShieldedAddresses()
     return addresses;
 }
 
-static int printAddressesPanel()
-{
-    if (!showAddressesPanel) return 0;
-
-    int lines = 0;
-    drawBoxTop("SHIELDED ADDRESSES");
-    lines++;
-
-    auto addresses = getShieldedAddresses();
-
-    if (addresses.empty()) {
-        std::cout << BOX_VERTICAL << " No unified addresses (use z_getnewaccount)" << std::endl;
-        lines++;
-    } else {
-        for (size_t i = 0; i < addresses.size(); i++) {
-            std::cout << BOX_VERTICAL << " \e[1;33m" << addresses[i] << "\e[0m" << std::endl;
-            lines++;
-        }
-    }
-
-    drawBoxBottom();
-    lines++;
-    return lines;
-}
 
 
 int printMetrics(size_t cols, bool mining)
@@ -3282,7 +3291,6 @@ void ThreadShowMetricsScreen()
         if (loaded) {
             lines += printStats(metricsStats.value(), isScreen, mining);
             lines += printWalletStatus();
-            lines += printAddressesPanel();
             lines += printMiningStatus(mining);
         }
         lines += printMetrics(cols, mining);
@@ -3339,8 +3347,7 @@ void ThreadShowMetricsScreen()
                         break;
                     }
                 } else if (key == 'A' || key == 'a') {
-                    toggleAddressPanel();
-                    forceFullClear = true;
+                    toggleAddressExpansion();
                     break;
                 } else if (key == ' ') {
                     forceFullClear = true;
