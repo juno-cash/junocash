@@ -98,6 +98,7 @@ static std::atomic<bool> hasPendingShield{false};
 
 // Track previous display state for redraw detection
 static int prevWalletLines = 0;
+static int prevMiningLines = 0;
 static bool prevShowShield = false;
 
 // Force full screen clear on next frame (used when layout changes)
@@ -1401,155 +1402,6 @@ int printMiningStatus(bool mining)
             }
             lines++;
 
-            // Show CPU model
-            static std::string cpuModel = GetCPUModel();
-            if (cpuModel != "Unknown CPU") {
-                drawRow("CPU", cpuModel);
-                lines++;
-            }
-
-            // Show memory DIMMs (detailed info from DMI)
-            InitDmiReader();
-            if (g_dmiReader && !g_dmiReader->memory().empty()) {
-                const auto& memory = g_dmiReader->memory();
-                bool hasMemory = false;
-
-                // Count valid/populated DIMMs
-                for (const auto& dimm : memory) {
-                    if (dimm.isValid() && dimm.size() > 0) {
-                        hasMemory = true;
-                        break;
-                    }
-                }
-
-                if (hasMemory) {
-                    // Show total first with channel info and DPC
-                    uint64_t totalMemory = 0;
-                    std::map<char, int> channelDimmCount;  // Track DIMMs per channel
-
-                    for (const auto& dimm : memory) {
-                        if (dimm.isValid() && dimm.size() > 0) {
-                            totalMemory += dimm.size();
-
-                            // Extract channel from slot ID (e.g., "DIMM_A1" -> 'A')
-                            std::string slotId = dimm.id().data();
-                            char channelChar = 0;
-
-                            // Look for pattern: DIMM_X# where X is the channel letter
-                            size_t underscorePos = slotId.find('_');
-                            if (underscorePos != std::string::npos && underscorePos + 1 < slotId.length()) {
-                                channelChar = slotId[underscorePos + 1];
-                                if (channelChar >= 'A' && channelChar <= 'Z') {
-                                    channelDimmCount[channelChar]++;
-                                }
-                            }
-                            // Also try bank locator (e.g., "CHANNEL A")
-                            else if (!dimm.bank().isEmpty()) {
-                                std::string bank = dimm.bank().data();
-                                for (char c : bank) {
-                                    if (c >= 'A' && c <= 'Z') {
-                                        channelDimmCount[c]++;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (totalMemory > 0) {
-                        std::string memoryStr = strprintf("%d GB", (totalMemory + 512*1024*1024) / (1024*1024*1024));
-
-                        // Add channel info and DPC
-                        if (!channelDimmCount.empty()) {
-                            int numChannels = channelDimmCount.size();
-
-                            // Calculate DPC (DIMMs per channel) - use the most common value
-                            std::map<int, int> dpcFrequency;
-                            for (const auto& pair : channelDimmCount) {
-                                dpcFrequency[pair.second]++;
-                            }
-
-                            int mostCommonDPC = 0;
-                            int maxFrequency = 0;
-                            for (const auto& pair : dpcFrequency) {
-                                if (pair.second > maxFrequency) {
-                                    maxFrequency = pair.second;
-                                    mostCommonDPC = pair.first;
-                                }
-                            }
-
-                            // Format channel description
-                            std::string channelDesc;
-                            if (numChannels == 1) channelDesc = "Single Channel";
-                            else if (numChannels == 2) channelDesc = "Dual Channel";
-                            else if (numChannels == 3) channelDesc = "Triple Channel";
-                            else if (numChannels == 4) channelDesc = "Quad Channel";
-                            else if (numChannels == 6) channelDesc = "Hexa Channel";
-                            else if (numChannels == 8) channelDesc = "Octa Channel";
-                            else if (numChannels == 12) channelDesc = "Dodeca Channel";
-                            else channelDesc = strprintf("%d-Channel", numChannels);
-
-                            // Add DPC info if valid
-                            if (mostCommonDPC > 0) {
-                                memoryStr += strprintf(" (%s, %dDPC)", channelDesc.c_str(), mostCommonDPC);
-                            } else {
-                                memoryStr += strprintf(" (%s)", channelDesc.c_str());
-                            }
-                        }
-
-                        drawRow("Memory", memoryStr);
-                        lines++;
-                    }
-
-                    // Show individual DIMMs (only populated ones)
-                    for (const auto& dimm : memory) {
-                        if (dimm.isValid() && dimm.size() > 0) {
-                            // Format: DIMM_A1: 32 GB DDR4 Corsair CMK16GX4M2B3200C16 @ 3133 MHz
-                            std::stringstream dimmSS;
-                            dimmSS << dimm.id().data() << ": "
-                                   << (dimm.size() + 512*1024*1024) / (1024*1024*1024) << " GB";
-
-                            // Add type if available and not "Undefined"
-                            std::string typeStr = dimm.type();
-                            if (!typeStr.empty() && typeStr != "Undefined" && typeStr != "Unknown") {
-                                dimmSS << " " << typeStr;
-                            }
-
-                            // Add vendor if available and not "Undefined"
-                            if (dimm.vendor().isValid() && !dimm.vendor().isEmpty()) {
-                                std::string vendorStr = dimm.vendor().data();
-                                if (vendorStr != "Undefined" && vendorStr != "Unknown") {
-                                    dimmSS << " " << vendorStr;
-                                }
-                            }
-
-                            // Add product/model if available and not "Undefined"
-                            if (dimm.product().isValid() && !dimm.product().isEmpty()) {
-                                std::string productStr = dimm.product().data();
-                                if (productStr != "Undefined" && productStr != "Unknown") {
-                                    dimmSS << " " << productStr;
-                                }
-                            }
-
-                            // Add speed at the end if available
-                            if (dimm.speed() > 0) {
-                                dimmSS << " @ " << dimm.speed() / 1000000 << " MHz";
-                            }
-
-                            drawRow("", dimmSS.str());
-                            lines++;
-                        }
-                    }
-                }
-            } else {
-                // Fallback to simple memory info
-                static std::string memoryInfo = GetMemoryInfo();
-                if (memoryInfo != "Unknown") {
-                    drawRow("Memory", memoryInfo);
-                    lines++;
-                }
-            }
-
             // Show motherboard model
             static std::string motherboard = GetMotherboardModel();
             if (motherboard != "Unknown") {
@@ -1762,6 +1614,12 @@ int printMiningStatus(bool mining)
 
     drawBoxBottom();
     lines++;
+
+    // Trigger redraw when line count changes (e.g., mining toggled on/off)
+    if (lines != prevMiningLines) {
+        forceFullClear = true;
+        prevMiningLines = lines;
+    }
 
     return lines;
 #else // ENABLE_MINING
