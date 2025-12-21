@@ -1702,23 +1702,26 @@ int printMiningStatus(bool mining)
             nThreads = GetArg("-genproclimit", 1);
         }
 
-        // Line 1: Mining status, threads, quit
+        // Line 1: Address expand, shield, mining, quit
+        std::string addrLabel = expandJ1Address ? "Collapse Address" : "Expand Address";
+        bool showShield = hasShieldableCoins.load() || hasPendingShield.load();
+        // Trigger redraw when shield button state changes
+        if (showShield != prevShowShield) {
+            forceFullClear = true;
+            prevShowShield = showShield;
+        }
+        std::string shieldPart = "";
+        if (showShield) {
+            std::string shieldLabel = hasPendingShield.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield Mined Coins";
+            shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
+        }
         std::string miningStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;32mON\e[0m";
-        std::string controls1 = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[T]\e[0m Threads: %d", miningStatus.c_str(), nThreads);
-
-        // Donation controls disabled for now
-        // int donationPct = getCurrentDonationPercentage();
-        // if (donationPct > 0) {
-        //     controls1 += strprintf("  \e[1;37m[D]\e[0m Donations: \e[1;35mON (%d%%)\e[0m  \e[1;37m[P]\e[0m Change %%", donationPct);
-        // } else {
-        //     controls1 += "  \e[1;37m[D]\e[0m Donations: \e[1;31mOFF\e[0m";
-        // }
-
-        controls1 += "  \e[1;37m[Q]\e[0m Quit";
+        std::string controls1 = strprintf("\e[1;37m[E]\e[0m %s%s  \e[1;37m[M]\e[0m Mining: %s  \e[1;37m[Q]\e[0m Quit",
+            addrLabel.c_str(), shieldPart.c_str(), miningStatus.c_str());
         drawCentered(controls1);
         lines++;
 
-        // Line 2: Mining mode toggles and benchmark
+        // Line 2: Threads, RandomX mode, hugepages
         bool isFastMode = RandomX_IsFastMode();
         bool hugepagesInUse = RandomX_IsUsingHugepages();
         bool buildingDataset = RandomX_IsBuildingDataset();
@@ -1731,25 +1734,15 @@ int printMiningStatus(bool mining)
         }
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
 
-        std::string addrLabel = expandJ1Address ? "Collapse" : "Expand";
-        bool showShield = hasShieldableCoins.load() || hasPendingShield.load();
-        // Trigger redraw when shield button state changes
-        if (showShield != prevShowShield) {
-            forceFullClear = true;
-            prevShowShield = showShield;
-        }
-        std::string shieldPart = "";
-        if (showShield) {
-            std::string shieldLabel = hasPendingShield.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
-            shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
-        }
-        std::string controls2 = strprintf("\e[1;37m[R]\e[0m RandomX: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[A]\e[0m %s%s  \e[1;37m[B]\e[0m Benchmark",
-            modeStatus.c_str(), hugepagesStatus.c_str(), addrLabel.c_str(), shieldPart.c_str());
+        std::string controls2 = strprintf("\e[1;37m[T]\e[0m Threads: %d  \e[1;37m[R]\e[0m RandomX: %s  \e[1;37m[H]\e[0m Hugepages: %s",
+            nThreads, modeStatus.c_str(), hugepagesStatus.c_str());
+        // Benchmark disabled for now
+        // controls2 += "  \e[1;37m[B]\e[0m Benchmark";
         drawCentered(controls2);
     } else {
         // Show STOPPING if mining is being stopped in background
         std::string offStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;31mOFF\e[0m";
-        std::string addrLabel = expandJ1Address ? "Collapse" : "Expand";
+        std::string addrLabel = expandJ1Address ? "Collapse Address" : "Expand Address";
         bool showShield = hasShieldableCoins.load() || hasPendingShield.load();
         // Trigger redraw when shield button state changes
         if (showShield != prevShowShield) {
@@ -1758,10 +1751,11 @@ int printMiningStatus(bool mining)
         }
         std::string shieldPart = "";
         if (showShield) {
-            std::string shieldLabel = hasPendingShield.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
+            std::string shieldLabel = hasPendingShield.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield Mined Coins";
             shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
         }
-        std::string controls = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[A]\e[0m %s%s  \e[1;37m[Q]\e[0m Quit", offStatus.c_str(), addrLabel.c_str(), shieldPart.c_str());
+        std::string controls = strprintf("\e[1;37m[E]\e[0m %s%s  \e[1;37m[M]\e[0m Mining: %s  \e[1;37m[Q]\e[0m Quit",
+            addrLabel.c_str(), shieldPart.c_str(), offStatus.c_str());
         drawCentered(controls);
     }
     lines++;
@@ -3545,15 +3539,17 @@ void ThreadShowMetricsScreen()
                         forceFullClear = true;
                         break;
                     }
-                } else if (key == 'B' || key == 'b') {
-                    // Toggle benchmark mode
-                    if (mining) {
-                        toggleBenchmark(rows);
-                        forceFullClear = true;
-                        break;
-                    }
-                } else if (key == 'A' || key == 'a') {
+                // Benchmark disabled for now
+                // } else if (key == 'B' || key == 'b') {
+                //     // Toggle benchmark mode
+                //     if (mining) {
+                //         toggleBenchmark(rows);
+                //         forceFullClear = true;
+                //         break;
+                //     }
+                } else if (key == 'E' || key == 'e') {
                     toggleAddressExpansion();
+                    forceFullClear = true;
                     break;
                 } else if (key == 'S' || key == 's') {
                     // Only process if there are shieldable coins and no pending shield
