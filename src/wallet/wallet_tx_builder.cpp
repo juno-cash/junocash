@@ -925,18 +925,6 @@ TransactionBuilderResult TransactionEffects::ApproveAndBuild(
 
     int nextBlockHeight = chain.Height() + 1;
 
-    // Allow Orchard recipients by setting an Orchard anchor.
-    std::optional<uint256> orchardAnchor;
-    if (spendable.sproutNoteEntries.empty()
-        && (InvolvesOrchard() || nPreferredTxVersion > ZIP225_MIN_TX_VERSION)
-        && this->anchorConfirmations > 0)
-    {
-        LOCK(cs_main);
-        auto anchorBlockIndex = chain[this->anchorHeight];
-        assert(anchorBlockIndex != nullptr);
-        orchardAnchor = anchorBlockIndex->hashFinalOrchardRoot;
-    }
-
     // Track the total of notes that we've added to the builder. This
     // shouldn't strictly be necessary, given `spendable.LimitToAmount`
     CAmount totalSpend = 0;
@@ -957,12 +945,31 @@ TransactionBuilderResult TransactionEffects::ApproveAndBuild(
         totalSpend += t.note.value();
     }
 
-    // Fetch Sapling anchor and witnesses, and Orchard Merkle paths.
+    // Fetch anchors, witnesses, and Orchard Merkle paths.
+    // IMPORTANT: We must hold both cs_main and cs_wallet together to prevent
+    // race conditions. The Orchard anchor is fetched from the block index
+    // (under cs_main) and must match the wallet's commitment tree state
+    // (under cs_wallet). Releasing cs_main before acquiring cs_wallet would
+    // allow a new block to arrive and update the wallet tree, causing an
+    // anchor mismatch assertion failure.
+    std::optional<uint256> orchardAnchor;
     uint256 saplingAnchor;
     std::vector<std::optional<SaplingWitness>> witnesses;
     std::vector<std::pair<libzcash::OrchardSpendingKey, orchard::SpendInfo>> orchardSpendInfo;
     {
-        LOCK(wallet.cs_wallet);
+        LOCK2(cs_main, wallet.cs_wallet);
+
+        // Get Orchard anchor from chain
+        if (spendable.sproutNoteEntries.empty()
+            && (InvolvesOrchard() || nPreferredTxVersion > ZIP225_MIN_TX_VERSION)
+            && this->anchorConfirmations > 0)
+        {
+            auto anchorBlockIndex = chain[this->anchorHeight];
+            assert(anchorBlockIndex != nullptr);
+            orchardAnchor = anchorBlockIndex->hashFinalOrchardRoot;
+        }
+
+        // Get Sapling witnesses
         if (!wallet.GetSaplingNoteWitnesses(
                     saplingOutPoints,
                     anchorConfirmations,
@@ -973,6 +980,7 @@ TransactionBuilderResult TransactionEffects::ApproveAndBuild(
             return TransactionBuilderResult("Insufficient Sapling witnesses.");
         }
 
+        // Get Orchard spend info - must be in same lock scope as anchor lookup
         if (orchardAnchor.has_value()) {
             orchardSpendInfo = wallet.GetOrchardSpendInfo(
                     spendable.orchardNoteMetadata,
