@@ -86,6 +86,9 @@ static std::atomic<bool> shieldingInProgress{false};
 // Track if there are shieldable coins (mature transparent balance > 0)
 static std::atomic<bool> hasShieldableCoins{false};
 
+// Track if there are locked coins (shielding in progress)
+static std::atomic<bool> hasLockedCoins{false};
+
 void AtomicTimer::start()
 {
     std::unique_lock<std::mutex> lock(mtx);
@@ -1195,8 +1198,28 @@ int printWalletStatus()
         CAmount immature = pwalletMain->GetImmatureBalance(std::nullopt);
         CAmount mature = pwalletMain->GetBalance(std::nullopt);
 
-        // Update hasShieldableCoins flag for controls display
-        hasShieldableCoins.store(mature > 0);
+        // Calculate locked coinbase value (coins being shielded)
+        CAmount lockedCoinbaseValue = 0;
+        {
+            LOCK2(cs_main, pwalletMain->cs_wallet);
+            for (const auto& outpoint : pwalletMain->setLockedCoins) {
+                auto it = pwalletMain->mapWallet.find(outpoint.hash);
+                if (it != pwalletMain->mapWallet.end()) {
+                    const CWalletTx& wtx = it->second;
+                    if (outpoint.n < wtx.vout.size()) {
+                        lockedCoinbaseValue += wtx.vout[outpoint.n].nValue;
+                    }
+                }
+            }
+        }
+
+        // Display balance excludes locked coins (being shielded)
+        CAmount displayMature = mature - lockedCoinbaseValue;
+        if (displayMature < 0) displayMature = 0;  // Safety check
+
+        // Update flags for controls display
+        hasShieldableCoins.store(displayMature > 0);
+        hasLockedCoins.store(lockedCoinbaseValue > 0);
 
         // Get shielded balances from account 0
         // Orchard notes require 10 confirmations to be spendable
@@ -1234,17 +1257,12 @@ int printWalletStatus()
                 auto allInputs = pwalletMain->FindSpendableInputs(selector.value(), 0, std::nullopt);
                 CAmount totalAll = sumShieldedInputs(allInputs);
                 shieldedUnconfirmed = totalAll - totalConfirmed;
-
-                // Clear shielding flag when unconfirmed balance becomes 0
-                if (shieldedUnconfirmed == 0 && shieldingInProgress.load()) {
-                    shieldingInProgress.store(false);
-                }
             }
         }
 
         std::string units = Params().CurrencyUnits();
 
-        drawRow("Mined Mature Balance", strprintf("%s %s", FormatMoney(mature), units.c_str()));
+        drawRow("Mined Mature Balance", strprintf("%s %s", FormatMoney(displayMature), units.c_str()));
         lines++;
         drawRow("Mined Immature Balance", strprintf("%s %s", FormatMoney(immature), units.c_str()));
         lines++;
@@ -1685,10 +1703,10 @@ int printMiningStatus(bool mining)
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
 
         std::string addrLabel = expandJ1Address ? "Collapse" : "Expand";
-        bool showShield = hasShieldableCoins.load() || shieldingInProgress.load();
+        bool showShield = hasShieldableCoins.load() || hasLockedCoins.load();
         std::string shieldPart = "";
         if (showShield) {
-            std::string shieldLabel = shieldingInProgress.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
+            std::string shieldLabel = hasLockedCoins.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
             shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
         }
         std::string controls2 = strprintf("\e[1;37m[R]\e[0m RandomX: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[A]\e[0m %s%s  \e[1;37m[B]\e[0m Benchmark",
@@ -1698,10 +1716,10 @@ int printMiningStatus(bool mining)
         // Show STOPPING if mining is being stopped in background
         std::string offStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;31mOFF\e[0m";
         std::string addrLabel = expandJ1Address ? "Collapse" : "Expand";
-        bool showShield = hasShieldableCoins.load() || shieldingInProgress.load();
+        bool showShield = hasShieldableCoins.load() || hasLockedCoins.load();
         std::string shieldPart = "";
         if (showShield) {
-            std::string shieldLabel = shieldingInProgress.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
+            std::string shieldLabel = hasLockedCoins.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
             shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
         }
         std::string controls = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[A]\e[0m %s%s  \e[1;37m[Q]\e[0m Quit", offStatus.c_str(), addrLabel.c_str(), shieldPart.c_str());
@@ -1739,26 +1757,6 @@ static void shieldCoinbase(int rows)
         std::cout << "\r\e[K\e[1;31mError: Wallet not available\e[0m" << std::flush;
         MilliSleep(2000);
         return;
-    }
-
-    // Check for unconfirmed shielded balance (previous shield still processing)
-    {
-        LOCK2(cs_main, pwalletMain->cs_wallet);
-        auto selector = pwalletMain->ZTXOSelectorForAccount(0, false, TransparentCoinbasePolicy::Allow);
-        if (selector.has_value()) {
-            auto allInputs = pwalletMain->FindSpendableInputs(selector.value(), 0, std::nullopt);
-            auto confirmedInputs = pwalletMain->FindSpendableInputs(selector.value(), 1, std::nullopt);
-
-            CAmount totalAll = 0, totalConfirmed = 0;
-            for (const auto& t : allInputs.orchardNoteMetadata) totalAll += t.GetNoteValue();
-            for (const auto& t : confirmedInputs.orchardNoteMetadata) totalConfirmed += t.GetNoteValue();
-
-            if (totalAll > totalConfirmed) {
-                std::cout << "\r\e[K\e[1;33mWaiting for previous shield to confirm...\e[0m" << std::flush;
-                MilliSleep(2000);
-                return;
-            }
-        }
     }
 
     // Get the default j1 address
@@ -1802,14 +1800,14 @@ static void shieldCoinbase(int rows)
 
         if (shieldingUTXOs == 0) {
             std::cout << "\r\e[K\e[1;33mNo coinbase UTXOs to shield\e[0m" << std::flush;
-            shieldingInProgress.store(false);
         } else {
             std::cout << "\r\e[K\e[1;32mShielding " << shieldingUTXOs << " UTXOs ("
                       << FormatMoney(shieldingValue * COIN) << " JUNO)"
                       << (remainingUTXOs > 0 ? strprintf(" - %d remaining", remainingUTXOs) : "")
                       << "\e[0m" << std::flush;
-            // Keep shieldingInProgress true until unconfirmed balance clears
         }
+        // Clear flag - hasLockedCoins now tracks the locking state
+        shieldingInProgress.store(false);
         MilliSleep(2000);
 
     } catch (const UniValue& e) {
@@ -3475,8 +3473,8 @@ void ThreadShowMetricsScreen()
                     toggleAddressExpansion();
                     break;
                 } else if (key == 'S' || key == 's') {
-                    // Only process if there are shieldable coins or shielding in progress
-                    if (hasShieldableCoins.load() || shieldingInProgress.load()) {
+                    // Only process if there are shieldable coins (not locked)
+                    if (hasShieldableCoins.load()) {
                         shieldCoinbase(rows);
                         forceFullClear = true;
                         break;
