@@ -1662,23 +1662,23 @@ int printMiningStatus(bool mining)
             lines++;
         }
 
-        // Show donation status if active
-        int donationPct = getCurrentDonationPercentage();
-        if (donationPct > 0) {
-            std::string donationAddr = getCurrentDonationAddress();
-            if (!donationAddr.empty()) {
-                std::string shortAddr;
-                if (donationAddr.length() > 20) {
-                    shortAddr = donationAddr.substr(0, 10) + "..." + donationAddr.substr(donationAddr.length() - 6);
-                } else {
-                    shortAddr = donationAddr;
-                }
-                drawRow("Donations", strprintf("\e[1;35m%d%%\e[0m → %s", donationPct, shortAddr.c_str()));
-            } else {
-                drawRow("Donations", strprintf("\e[1;35m%d%%\e[0m → \e[1;31mNO ADDRESS SET\e[0m", donationPct));
-            }
-            lines++;
-        }
+        // Donation UI disabled for now
+        // int donationPct = getCurrentDonationPercentage();
+        // if (donationPct > 0) {
+        //     std::string donationAddr = getCurrentDonationAddress();
+        //     if (!donationAddr.empty()) {
+        //         std::string shortAddr;
+        //         if (donationAddr.length() > 20) {
+        //             shortAddr = donationAddr.substr(0, 10) + "..." + donationAddr.substr(donationAddr.length() - 6);
+        //         } else {
+        //             shortAddr = donationAddr;
+        //         }
+        //         drawRow("Donations", strprintf("\e[1;35m%d%%\e[0m → %s", donationPct, shortAddr.c_str()));
+        //     } else {
+        //         drawRow("Donations", strprintf("\e[1;35m%d%%\e[0m → \e[1;31mNO ADDRESS SET\e[0m", donationPct));
+        //     }
+        //     lines++;
+        // }
     } else {
         drawRow("Status", "\e[1;31m○ INACTIVE\e[0m");
         lines++;
@@ -1702,16 +1702,17 @@ int printMiningStatus(bool mining)
             nThreads = GetArg("-genproclimit", 1);
         }
 
-        // Line 1: Mining status, threads, donations, quit
+        // Line 1: Mining status, threads, quit
         std::string miningStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;32mON\e[0m";
         std::string controls1 = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[T]\e[0m Threads: %d", miningStatus.c_str(), nThreads);
 
-        int donationPct = getCurrentDonationPercentage();
-        if (donationPct > 0) {
-            controls1 += strprintf("  \e[1;37m[D]\e[0m Donations: \e[1;35mON (%d%%)\e[0m  \e[1;37m[P]\e[0m Change %%", donationPct);
-        } else {
-            controls1 += "  \e[1;37m[D]\e[0m Donations: \e[1;31mOFF\e[0m";
-        }
+        // Donation controls disabled for now
+        // int donationPct = getCurrentDonationPercentage();
+        // if (donationPct > 0) {
+        //     controls1 += strprintf("  \e[1;37m[D]\e[0m Donations: \e[1;35mON (%d%%)\e[0m  \e[1;37m[P]\e[0m Change %%", donationPct);
+        // } else {
+        //     controls1 += "  \e[1;37m[D]\e[0m Donations: \e[1;31mOFF\e[0m";
+        // }
 
         controls1 += "  \e[1;37m[Q]\e[0m Quit";
         drawCentered(controls1);
@@ -3574,19 +3575,21 @@ void ThreadShowMetricsScreen()
                         toggleHugepages();
                         forceFullClear = true;
                         break;
-                    } else if (key == 'D' || key == 'd') {
-                        toggleDonation();
-                        forceFullClear = true;
-                        break;
-                    } else if (key == 'P' || key == 'p') {
-                        // Only allow changing percentage if donations are active
-                        int currentPct = getCurrentDonationPercentage();
-                        if (currentPct > 0) {
-                            promptForPercentage(rows);
-                            forceFullClear = true;
-                            break;
-                        }
                     }
+                    // Donation key handlers disabled for now
+                    // } else if (key == 'D' || key == 'd') {
+                    //     toggleDonation();
+                    //     forceFullClear = true;
+                    //     break;
+                    // } else if (key == 'P' || key == 'p') {
+                    //     // Only allow changing percentage if donations are active
+                    //     int currentPct = getCurrentDonationPercentage();
+                    //     if (currentPct > 0) {
+                    //         promptForPercentage(rows);
+                    //         forceFullClear = true;
+                    //         break;
+                    //     }
+                    // }
                 }
             }
 
