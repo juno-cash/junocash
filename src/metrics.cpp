@@ -1284,19 +1284,21 @@ int printWalletStatus()
         auto addresses = getShieldedAddresses();
         if (!addresses.empty()) {
             std::string j1Addr = addresses[0];  // First unified address (diversifier 0)
-            std::string displayAddr;
             if (expandJ1Address) {
-                displayAddr = j1Addr;  // Full address
+                // Full address on single line for easy copy-paste
+                std::cout << BOX_VERTICAL << " \e[1;36mShielded Address:\e[0m \e[1;33m" << j1Addr << "\e[0m\e[K" << std::endl;
+                lines++;
             } else {
                 // Truncate: first 12 + "..." + last 12
+                std::string displayAddr;
                 if (j1Addr.length() > 27) {
                     displayAddr = j1Addr.substr(0, 12) + "..." + j1Addr.substr(j1Addr.length() - 12);
                 } else {
                     displayAddr = j1Addr;
                 }
+                drawRow("Shielded Address", displayAddr);
+                lines++;
             }
-            drawRow("Shielded Addr", displayAddr);
-            lines++;
         }
     } else {
         drawRow("Status", "Wallet not loaded");
