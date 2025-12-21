@@ -5,12 +5,14 @@
 
 #include "metrics.h"
 
+#include "asyncrpcqueue.h"
 #include "chainparams.h"
 #include "init.h"
 #include "checkpoints.h"
 #include "main.h"
 #include "miner.h"
 #include "rpc/server.h"
+#include "uint256.h"
 #include "timedata.h"
 #include "ui_interface.h"
 #include "util/system.h"
@@ -88,6 +90,21 @@ static std::atomic<bool> hasShieldableCoins{false};
 
 // Track if there are locked coins (shielding in progress)
 static std::atomic<bool> hasLockedCoins{false};
+
+// Pending shield operation tracking - wait for minconf >= 1
+static std::string pendingShieldOpId = "";
+static uint256 pendingShieldTxId;
+static std::atomic<bool> hasPendingShield{false};
+
+// Track previous display state for redraw detection
+static int prevWalletLines = 0;
+static bool prevShowShield = false;
+
+// Force full screen clear on next frame (used when layout changes)
+static bool forceFullClear = false;
+
+// Forward declaration
+static void checkPendingShield();
 
 void AtomicTimer::start()
 {
@@ -1189,6 +1206,9 @@ int printWalletStatus()
 {
     int lines = 0;
 
+    // Check pending shield operation status
+    checkPendingShield();
+
     // Wallet Balance Box
     drawBoxTop("WALLET");
     lines++;
@@ -1264,8 +1284,10 @@ int printWalletStatus()
 
         drawRow("Mined Mature Balance", strprintf("%s %s", FormatMoney(displayMature), units.c_str()));
         lines++;
-        drawRow("Mined Immature Balance", strprintf("%s %s", FormatMoney(immature), units.c_str()));
-        lines++;
+        if (immature > 0) {
+            drawRow("Mined Immature Balance", strprintf("%s %s", FormatMoney(immature), units.c_str()));
+            lines++;
+        }
         drawRow("Shielded Balance", strprintf("%s %s", FormatMoney(shieldedSpendable), units.c_str()));
         lines++;
         if (shieldedConfirming > 0) {
@@ -1341,6 +1363,12 @@ int printWalletStatus()
     lines++;
     std::cout << std::endl;
     lines++;
+
+    // Trigger redraw when line count changes (balance rows appear/disappear)
+    if (lines != prevWalletLines) {
+        forceFullClear = true;
+        prevWalletLines = lines;
+    }
 
     return lines;
 }
@@ -1703,10 +1731,15 @@ int printMiningStatus(bool mining)
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
 
         std::string addrLabel = expandJ1Address ? "Collapse" : "Expand";
-        bool showShield = hasShieldableCoins.load() || hasLockedCoins.load();
+        bool showShield = hasShieldableCoins.load() || hasPendingShield.load();
+        // Trigger redraw when shield button state changes
+        if (showShield != prevShowShield) {
+            forceFullClear = true;
+            prevShowShield = showShield;
+        }
         std::string shieldPart = "";
         if (showShield) {
-            std::string shieldLabel = hasLockedCoins.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
+            std::string shieldLabel = hasPendingShield.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
             shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
         }
         std::string controls2 = strprintf("\e[1;37m[R]\e[0m RandomX: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[A]\e[0m %s%s  \e[1;37m[B]\e[0m Benchmark",
@@ -1716,10 +1749,15 @@ int printMiningStatus(bool mining)
         // Show STOPPING if mining is being stopped in background
         std::string offStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;31mOFF\e[0m";
         std::string addrLabel = expandJ1Address ? "Collapse" : "Expand";
-        bool showShield = hasShieldableCoins.load() || hasLockedCoins.load();
+        bool showShield = hasShieldableCoins.load() || hasPendingShield.load();
+        // Trigger redraw when shield button state changes
+        if (showShield != prevShowShield) {
+            forceFullClear = true;
+            prevShowShield = showShield;
+        }
         std::string shieldPart = "";
         if (showShield) {
-            std::string shieldLabel = hasLockedCoins.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
+            std::string shieldLabel = hasPendingShield.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield";
             shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
         }
         std::string controls = strprintf("\e[1;37m[M]\e[0m Mining: %s  \e[1;37m[A]\e[0m %s%s  \e[1;37m[Q]\e[0m Quit", offStatus.c_str(), addrLabel.c_str(), shieldPart.c_str());
@@ -1736,20 +1774,60 @@ int printMiningStatus(bool mining)
 #endif // !ENABLE_MINING
 }
 
-// Force full screen clear on next frame (used when layout changes)
-static bool forceFullClear = false;
-
 static void toggleAddressExpansion()
 {
     expandJ1Address = !expandJ1Address;
     forceFullClear = true;
 }
 
+// Check pending shield operation status and update tracking
+static void checkPendingShield()
+{
+    if (!hasPendingShield.load()) return;
+    if (!pwalletMain) return;
+
+    // If we have opid but no txid yet, check operation status
+    if (pendingShieldTxId.IsNull() && !pendingShieldOpId.empty()) {
+        std::shared_ptr<AsyncRPCQueue> q = getAsyncRPCQueue();
+        auto operation = q->getOperationForId(pendingShieldOpId);
+        if (operation) {
+            if (operation->isSuccess()) {
+                // Extract txid from result
+                UniValue result = operation->getResult();
+                std::string txidStr = find_value(result, "txid").get_str();
+                pendingShieldTxId.SetHex(txidStr);
+            } else if (operation->isFailed() || operation->isCancelled()) {
+                // Operation failed - clear pending state
+                hasPendingShield.store(false);
+                pendingShieldOpId = "";
+                pendingShieldTxId.SetNull();
+                return;
+            }
+            // Still executing - wait
+        }
+    }
+
+    // If we have txid, check confirmation count
+    if (!pendingShieldTxId.IsNull()) {
+        LOCK2(cs_main, pwalletMain->cs_wallet);
+        auto it = pwalletMain->mapWallet.find(pendingShieldTxId);
+        if (it != pwalletMain->mapWallet.end()) {
+            int depth = it->second.GetDepthInMainChain(std::nullopt);
+            if (depth >= 1) {
+                // Transaction confirmed - clear pending state
+                hasPendingShield.store(false);
+                pendingShieldOpId = "";
+                pendingShieldTxId.SetNull();
+            }
+        }
+    }
+}
+
 // Shield coinbase UTXOs to the default j1 address
 static void shieldCoinbase(int rows)
 {
-    // Prevent repeated keypresses while shielding
-    if (shieldingInProgress.load()) {
+    // Prevent repeated keypresses while shielding or waiting for confirmation
+    if (shieldingInProgress.load() || hasPendingShield.load()) {
         return;
     }
 
@@ -1805,8 +1883,12 @@ static void shieldCoinbase(int rows)
                       << FormatMoney(shieldingValue * COIN) << " JUNO)"
                       << (remainingUTXOs > 0 ? strprintf(" - %d remaining", remainingUTXOs) : "")
                       << "\e[0m" << std::flush;
+
+            // Track the operation - wait for minconf >= 1
+            pendingShieldOpId = opid;
+            pendingShieldTxId.SetNull();
+            hasPendingShield.store(true);
         }
-        // Clear flag - hasLockedCoins now tracks the locking state
         shieldingInProgress.store(false);
         MilliSleep(2000);
 
@@ -3473,8 +3555,8 @@ void ThreadShowMetricsScreen()
                     toggleAddressExpansion();
                     break;
                 } else if (key == 'S' || key == 's') {
-                    // Only process if there are shieldable coins (not locked)
-                    if (hasShieldableCoins.load()) {
+                    // Only process if there are shieldable coins and no pending shield
+                    if (hasShieldableCoins.load() && !hasPendingShield.load()) {
                         shieldCoinbase(rows);
                         forceFullClear = true;
                         break;
