@@ -2021,6 +2021,8 @@ static void promptSendTransaction(int rows)
     while (confirm != 'Y' && confirm != 'y' && confirm != 'N' && confirm != 'n') {
         std::cin >> confirm;
     }
+    // Clear any remaining input (newline) from buffer
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
     // Clear the confirmation screen
     for (int i = 0; i < 6; i++) {
@@ -2570,22 +2572,26 @@ static int printWalletMenu(int rows, int cols)
             }
 
             // Block number and confirmation display
+            // Mining transactions need 100 confirmations to mature, others need 10
+            bool isMining = (tx.type == "Mining");
+            int requiredConf = isMining ? 100 : 10;
+
             std::string blockStr;
             std::string confStr;
             std::string confColor;
-            if (tx.confirmations >= 10) {
+            if (tx.confirmations >= requiredConf) {
                 int blockHeight = currentHeight - tx.confirmations + 1;
                 blockStr = strprintf("#%d", blockHeight);
-                confStr = "10/10";
+                confStr = strprintf("%d/%d", requiredConf, requiredConf);
                 confColor = "\e[1;32m";  // Green
             } else if (tx.confirmations > 0) {
                 int blockHeight = currentHeight - tx.confirmations + 1;
                 blockStr = strprintf("#%d", blockHeight);
-                confStr = strprintf("%d/10", tx.confirmations);
+                confStr = strprintf("%d/%d", tx.confirmations, requiredConf);
                 confColor = "\e[1;33m";  // Yellow
             } else {
                 blockStr = "pending";
-                confStr = "0/10";
+                confStr = strprintf("0/%d", requiredConf);
                 confColor = "\e[1;33m";  // Yellow
             }
 
