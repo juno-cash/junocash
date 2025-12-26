@@ -121,6 +121,7 @@ static std::atomic<bool> expandTxids{false};  // [E] key toggles full txid displ
 // Track previous display state for redraw detection
 static int prevWalletLines = 0;
 static int prevMiningLines = 0;
+static int prevWalletMenuLines = 0;
 static bool prevShowShield = false;
 
 // Force full screen clear on next frame (used when layout changes)
@@ -2499,6 +2500,49 @@ static int printWalletMenu(int rows, int cols)
     lines++;
 
     auto transactions = getRecentTransactions(10);
+
+    // Inject pending send transaction if we have txid but it's not in the list yet
+    if (!pendingSendTxId.IsNull()) {
+        bool found = false;
+        for (const auto& tx : transactions) {
+            if (tx.txid == pendingSendTxId) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            TxDisplayInfo pendingTx;
+            pendingTx.txid = pendingSendTxId;
+            pendingTx.amount = 0;  // Unknown until confirmed
+            pendingTx.confirmations = 0;
+            pendingTx.type = "Sent";
+            pendingTx.timestamp = GetTime();
+            transactions.insert(transactions.begin(), pendingTx);
+            if (transactions.size() > 10) transactions.pop_back();
+        }
+    }
+
+    // Inject pending shield transaction if we have txid but it's not in the list yet
+    if (!pendingShieldTxId.IsNull()) {
+        bool found = false;
+        for (const auto& tx : transactions) {
+            if (tx.txid == pendingShieldTxId) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            TxDisplayInfo pendingTx;
+            pendingTx.txid = pendingShieldTxId;
+            pendingTx.amount = 0;  // Unknown until confirmed
+            pendingTx.confirmations = 0;
+            pendingTx.type = "Shield";
+            pendingTx.timestamp = GetTime();
+            transactions.insert(transactions.begin(), pendingTx);
+            if (transactions.size() > 10) transactions.pop_back();
+        }
+    }
+
     if (transactions.empty()) {
         drawCentered("No transactions yet");
         lines++;
@@ -2613,6 +2657,12 @@ static int printWalletMenu(int rows, int cols)
 
     drawBoxBottom();
     lines++;
+
+    // Force full clear if line count changed
+    if (lines != prevWalletMenuLines) {
+        forceFullClear = true;
+        prevWalletMenuLines = lines;
+    }
 
     return lines;
 }
