@@ -1,8 +1,10 @@
 // Copyright (c) 2022-2023 The Zcash developers
+// Copyright (c) 2025 Juno Cash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 #include "wallet/orchard.h"
+#include "util/system.h"
 
 std::optional<libzcash::OrchardSpendingKey> OrchardWallet::GetSpendingKeyForAddress(
     const libzcash::OrchardRawAddress& addr) const
@@ -19,6 +21,28 @@ std::vector<std::pair<libzcash::OrchardSpendingKey, orchard::SpendInfo>> Orchard
 {
     std::vector<std::pair<libzcash::OrchardSpendingKey, orchard::SpendInfo>> result;
     auto walletAnchor = GetAnchorWithConfirmations(anchorConfirmations);
+
+    // Debug logging for anchor mismatch diagnosis
+    if (!walletAnchor.has_value()) {
+        LogPrintf("ERROR: Orchard anchor not found at %d confirmations. "
+                  "Last checkpoint height: %s\n",
+                  anchorConfirmations,
+                  GetLastCheckpointHeight().has_value()
+                      ? std::to_string(GetLastCheckpointHeight().value())
+                      : "none");
+    } else if (walletAnchor.value() != anchor) {
+        LogPrintf("ERROR: Orchard anchor mismatch at %d confirmations:\n"
+                  "  Wallet anchor: %s\n"
+                  "  Chain anchor:  %s\n"
+                  "  Last checkpoint height: %s\n",
+                  anchorConfirmations,
+                  walletAnchor.value().GetHex(),
+                  anchor.GetHex(),
+                  GetLastCheckpointHeight().has_value()
+                      ? std::to_string(GetLastCheckpointHeight().value())
+                      : "none");
+    }
+
     assert(walletAnchor.has_value() && walletAnchor.value() == anchor);
 
     for (const auto& note : noteMetadata) {
