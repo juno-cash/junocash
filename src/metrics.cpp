@@ -96,6 +96,19 @@ static std::string pendingShieldOpId = "";
 static uint256 pendingShieldTxId;
 static std::atomic<bool> hasPendingShield{false};
 
+// Wallet submenu state
+enum class MetricsScreen {
+    MAIN,
+    WALLET
+};
+static std::atomic<MetricsScreen> currentScreen{MetricsScreen::MAIN};
+
+// Pending send operation tracking (similar to shield)
+static std::atomic<bool> sendInProgress{false};
+static std::atomic<bool> hasPendingSend{false};
+static std::string pendingSendOpId = "";
+static uint256 pendingSendTxId;
+
 // Track previous display state for redraw detection
 static int prevWalletLines = 0;
 static int prevMiningLines = 0;
@@ -104,8 +117,26 @@ static bool prevShowShield = false;
 // Force full screen clear on next frame (used when layout changes)
 static bool forceFullClear = false;
 
-// Forward declaration
+// Transaction display info for wallet menu
+struct TxDisplayInfo {
+    uint256 txid;
+    CAmount amount;           // Net amount (positive=received, negative=sent)
+    int confirmations;        // Current confirmation count
+    std::string type;         // "Received", "Sent", "Mining", "Shield"
+    int64_t timestamp;
+};
+
+// Forward declarations
 static void checkPendingShield();
+static void checkPendingSend();
+static std::vector<TxDisplayInfo> getRecentTransactions(int count);
+static int printWalletMenu(int rows, int cols);
+static void promptSendTransaction(int rows);
+static std::vector<std::string> getShieldedAddresses();
+#ifndef WIN32
+static void enableRawMode();
+static void enableCanonicalMode();
+#endif
 
 void AtomicTimer::start()
 {
@@ -1554,22 +1585,11 @@ int printMiningStatus(bool mining)
             nThreads = GetArg("-genproclimit", 1);
         }
 
-        // Line 1: Address expand, shield, mining, quit
+        // Line 1: Address expand, wallet, mining, quit
         std::string addrLabel = expandJ1Address ? "Collapse Address" : "Expand Address";
-        bool showShield = hasShieldableCoins.load() || hasPendingShield.load();
-        // Trigger redraw when shield button state changes
-        if (showShield != prevShowShield) {
-            forceFullClear = true;
-            prevShowShield = showShield;
-        }
-        std::string shieldPart = "";
-        if (showShield) {
-            std::string shieldLabel = hasPendingShield.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield Mined Coins";
-            shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
-        }
         std::string miningStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;32mON\e[0m";
-        std::string controls1 = strprintf("\e[1;37m[E]\e[0m %s%s  \e[1;37m[M]\e[0m Mining: %s  \e[1;37m[Q]\e[0m Quit",
-            addrLabel.c_str(), shieldPart.c_str(), miningStatus.c_str());
+        std::string controls1 = strprintf("\e[1;37m[E]\e[0m %s  \e[1;37m[W]\e[0m Wallet  \e[1;37m[M]\e[0m Mining: %s  \e[1;37m[Q]\e[0m Quit",
+            addrLabel.c_str(), miningStatus.c_str());
         drawCentered(controls1);
         lines++;
 
@@ -1595,19 +1615,8 @@ int printMiningStatus(bool mining)
         // Show STOPPING if mining is being stopped in background
         std::string offStatus = miningStopInProgress.load() ? "\e[1;33mSTOPPING...\e[0m" : "\e[1;31mOFF\e[0m";
         std::string addrLabel = expandJ1Address ? "Collapse Address" : "Expand Address";
-        bool showShield = hasShieldableCoins.load() || hasPendingShield.load();
-        // Trigger redraw when shield button state changes
-        if (showShield != prevShowShield) {
-            forceFullClear = true;
-            prevShowShield = showShield;
-        }
-        std::string shieldPart = "";
-        if (showShield) {
-            std::string shieldLabel = hasPendingShield.load() ? "\e[1;33mPROCESSING\e[0m" : "Shield Mined Coins";
-            shieldPart = strprintf("  \e[1;37m[S]\e[0m %s", shieldLabel.c_str());
-        }
-        std::string controls = strprintf("\e[1;37m[E]\e[0m %s%s  \e[1;37m[M]\e[0m Mining: %s  \e[1;37m[Q]\e[0m Quit",
-            addrLabel.c_str(), shieldPart.c_str(), offStatus.c_str());
+        std::string controls = strprintf("\e[1;37m[E]\e[0m %s  \e[1;37m[W]\e[0m Wallet  \e[1;37m[M]\e[0m Mining: %s  \e[1;37m[Q]\e[0m Quit",
+            addrLabel.c_str(), offStatus.c_str());
         drawCentered(controls);
     }
     lines++;
@@ -1671,6 +1680,49 @@ static void checkPendingShield()
                 hasPendingShield.store(false);
                 pendingShieldOpId = "";
                 pendingShieldTxId.SetNull();
+            }
+        }
+    }
+}
+
+// Check pending send operation status and update tracking
+static void checkPendingSend()
+{
+    if (!hasPendingSend.load()) return;
+    if (!pwalletMain) return;
+
+    // If we have opid but no txid yet, check operation status
+    if (pendingSendTxId.IsNull() && !pendingSendOpId.empty()) {
+        std::shared_ptr<AsyncRPCQueue> q = getAsyncRPCQueue();
+        auto operation = q->getOperationForId(pendingSendOpId);
+        if (operation) {
+            if (operation->isSuccess()) {
+                // Extract txid from result
+                UniValue result = operation->getResult();
+                std::string txidStr = find_value(result, "txid").get_str();
+                pendingSendTxId.SetHex(txidStr);
+            } else if (operation->isFailed() || operation->isCancelled()) {
+                // Operation failed - clear pending state
+                hasPendingSend.store(false);
+                pendingSendOpId = "";
+                pendingSendTxId.SetNull();
+                return;
+            }
+            // Still executing - wait
+        }
+    }
+
+    // If we have txid, check confirmation count
+    if (!pendingSendTxId.IsNull()) {
+        LOCK2(cs_main, pwalletMain->cs_wallet);
+        auto it = pwalletMain->mapWallet.find(pendingSendTxId);
+        if (it != pwalletMain->mapWallet.end()) {
+            int depth = it->second.GetDepthInMainChain(std::nullopt);
+            if (depth >= 1) {
+                // Transaction confirmed - clear pending state
+                hasPendingSend.store(false);
+                pendingSendOpId = "";
+                pendingSendTxId.SetNull();
             }
         }
     }
@@ -1757,6 +1809,290 @@ static void shieldCoinbase(int rows)
     }
 }
 
+// Prompt for send transaction details and execute
+static void promptSendTransaction(int rows)
+{
+    // Prevent repeated keypresses while sending
+    if (sendInProgress.load() || hasPendingSend.load()) {
+        return;
+    }
+
+    if (!pwalletMain) {
+        std::cout << "\r\e[K\e[1;31mError: Wallet not available\e[0m" << std::flush;
+        MilliSleep(2000);
+        return;
+    }
+
+#ifndef WIN32
+    enableCanonicalMode();
+#endif
+
+    int inputRow = rows - 2;
+    KeyIO keyIO(Params());
+    std::string units = Params().CurrencyUnits();
+
+    // Get spendable shielded balance
+    CAmount spendableBalance = 0;
+    {
+        LOCK2(cs_main, pwalletMain->cs_wallet);
+        auto selector = pwalletMain->ZTXOSelectorForAccount(0, false, TransparentCoinbasePolicy::Allow);
+        if (selector.has_value()) {
+            auto inputs = pwalletMain->FindSpendableInputs(selector.value(), 10, std::nullopt);
+            for (const auto& t : inputs.orchardNoteMetadata) {
+                spendableBalance += t.GetNoteValue();
+            }
+        }
+    }
+
+    if (spendableBalance <= 0) {
+        std::cout << "\e[" << inputRow << ";1H\e[K";
+        std::cout << "\e[1;31mNo spendable shielded balance (need 10 confirmations)\e[0m" << std::flush;
+        MilliSleep(3000);
+        std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+        enableRawMode();
+#endif
+        return;
+    }
+
+    // Step 1: Get destination address
+    std::cout << "\e[" << inputRow << ";1H\e[K";
+    std::cout << "Enter destination address (j1...): " << std::flush;
+
+    std::string destAddress;
+    std::getline(std::cin, destAddress);
+
+    // Trim whitespace
+    while (!destAddress.empty() && (destAddress.front() == ' ' || destAddress.front() == '\t')) {
+        destAddress.erase(0, 1);
+    }
+    while (!destAddress.empty() && (destAddress.back() == ' ' || destAddress.back() == '\t')) {
+        destAddress.pop_back();
+    }
+
+    if (destAddress.empty()) {
+        std::cout << "\e[" << inputRow << ";1H\e[K";
+        std::cout << "\e[1;31mCancelled\e[0m" << std::flush;
+        MilliSleep(1000);
+        std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+        enableRawMode();
+#endif
+        return;
+    }
+
+    // Validate address - must be a unified address with Orchard receiver
+    auto decoded = keyIO.DecodePaymentAddress(destAddress);
+    bool validOrchardAddr = false;
+    if (decoded.has_value()) {
+        auto ua = std::get_if<libzcash::UnifiedAddress>(&decoded.value());
+        if (ua) {
+            // Check if it has an Orchard receiver
+            if (ua->GetOrchardReceiver().has_value()) {
+                validOrchardAddr = true;
+            }
+        }
+    }
+
+    if (!validOrchardAddr) {
+        std::cout << "\e[" << inputRow << ";1H\e[K";
+        std::cout << "\e[1;31mInvalid address. Only j1... addresses with Orchard receivers accepted.\e[0m" << std::flush;
+        MilliSleep(3000);
+        std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+        enableRawMode();
+#endif
+        return;
+    }
+
+    // Step 2: Get amount
+    std::cout << "\e[" << inputRow << ";1H\e[K";
+    std::cout << "Enter amount (" << FormatMoney(spendableBalance) << " " << units << " available, or 'max'): " << std::flush;
+
+    std::string amountStr;
+    std::getline(std::cin, amountStr);
+
+    // Trim whitespace
+    while (!amountStr.empty() && (amountStr.front() == ' ' || amountStr.front() == '\t')) {
+        amountStr.erase(0, 1);
+    }
+    while (!amountStr.empty() && (amountStr.back() == ' ' || amountStr.back() == '\t')) {
+        amountStr.pop_back();
+    }
+
+    if (amountStr.empty()) {
+        std::cout << "\e[" << inputRow << ";1H\e[K";
+        std::cout << "\e[1;31mCancelled\e[0m" << std::flush;
+        MilliSleep(1000);
+        std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+        enableRawMode();
+#endif
+        return;
+    }
+
+    CAmount sendAmount = 0;
+    CAmount estimatedFee = 10000; // 0.0001 JNO default fee estimate (ZIP 317)
+    bool isMax = false;
+
+    // Check for "max" or "all"
+    std::string amountLower = amountStr;
+    std::transform(amountLower.begin(), amountLower.end(), amountLower.begin(), ::tolower);
+    if (amountLower == "max" || amountLower == "all") {
+        isMax = true;
+        sendAmount = spendableBalance - estimatedFee;
+        if (sendAmount <= 0) {
+            std::cout << "\e[" << inputRow << ";1H\e[K";
+            std::cout << "\e[1;31mInsufficient balance to cover fee\e[0m" << std::flush;
+            MilliSleep(3000);
+            std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+            enableRawMode();
+#endif
+            return;
+        }
+    } else {
+        // Parse as decimal amount
+        if (!ParseMoney(amountStr, sendAmount) || sendAmount <= 0) {
+            std::cout << "\e[" << inputRow << ";1H\e[K";
+            std::cout << "\e[1;31mInvalid amount\e[0m" << std::flush;
+            MilliSleep(3000);
+            std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+            enableRawMode();
+#endif
+            return;
+        }
+
+        if (sendAmount + estimatedFee > spendableBalance) {
+            std::cout << "\e[" << inputRow << ";1H\e[K";
+            std::cout << "\e[1;31mInsufficient balance (need " << FormatMoney(sendAmount + estimatedFee) << " including fee)\e[0m" << std::flush;
+            MilliSleep(3000);
+            std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+            enableRawMode();
+#endif
+            return;
+        }
+    }
+
+    // Step 3: Show confirmation screen
+    CAmount remainingBalance = spendableBalance - sendAmount - estimatedFee;
+
+    std::cout << "\e[" << inputRow << ";1H\e[K";
+    std::cout << "\e[1;33m=== CONFIRM SEND ===\e[0m" << std::endl;
+    std::cout << "\e[K  To:     " << destAddress.substr(0, 40) << "..." << std::endl;
+    std::cout << "\e[K  Amount: \e[1;32m" << FormatMoney(sendAmount) << " " << units << "\e[0m" << std::endl;
+    std::cout << "\e[K  Fee:    " << FormatMoney(estimatedFee) << " " << units << " (estimated)" << std::endl;
+    std::cout << "\e[K  After:  " << FormatMoney(remainingBalance) << " " << units << " remaining" << std::endl;
+    std::cout << "\e[K\e[1;37m  [Y] Confirm   [N] Cancel\e[0m " << std::flush;
+
+    // Wait for Y/N
+    char confirm = 0;
+    while (confirm != 'Y' && confirm != 'y' && confirm != 'N' && confirm != 'n') {
+        std::cin >> confirm;
+    }
+
+    // Clear the confirmation screen
+    for (int i = 0; i < 6; i++) {
+        std::cout << "\e[" << (inputRow + i) << ";1H\e[K";
+    }
+
+    if (confirm == 'N' || confirm == 'n') {
+        std::cout << "\e[" << inputRow << ";1H\e[K";
+        std::cout << "\e[1;33mSend cancelled\e[0m" << std::flush;
+        MilliSleep(1000);
+        std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+        enableRawMode();
+#endif
+        return;
+    }
+
+    // Step 4: Execute the send
+    sendInProgress.store(true);
+
+    std::cout << "\e[" << inputRow << ";1H\e[K";
+    std::cout << "\e[1;33mSending...\e[0m" << std::flush;
+
+    // Get source address (first unified address)
+    auto sourceAddresses = getShieldedAddresses();
+    if (sourceAddresses.empty()) {
+        std::cout << "\e[" << inputRow << ";1H\e[K";
+        std::cout << "\e[1;31mError: No source address available\e[0m" << std::flush;
+        sendInProgress.store(false);
+        MilliSleep(3000);
+        std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+        enableRawMode();
+#endif
+        return;
+    }
+
+    try {
+        // Build RPC parameters for z_sendmany
+        // z_sendmany "fromaddress" [{"address":"...", "amount":...}]
+        UniValue params(UniValue::VARR);
+        params.push_back(sourceAddresses[0]);
+
+        UniValue amounts(UniValue::VARR);
+        UniValue recipient(UniValue::VOBJ);
+        recipient.pushKV("address", destAddress);
+        recipient.pushKV("amount", ValueFromAmount(sendAmount));
+        amounts.push_back(recipient);
+        params.push_back(amounts);
+
+        // Call the RPC function via tableRPC
+        const CRPCCommand* cmd = tableRPC["z_sendmany"];
+        if (!cmd) {
+            std::cout << "\e[" << inputRow << ";1H\e[K";
+            std::cout << "\e[1;31mError: RPC command not found\e[0m" << std::flush;
+            sendInProgress.store(false);
+            MilliSleep(2000);
+            std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+            enableRawMode();
+#endif
+            return;
+        }
+
+        UniValue result = cmd->actor(params, false);
+
+        // result is the operation ID
+        std::string opid = result.get_str();
+
+        std::cout << "\e[" << inputRow << ";1H\e[K";
+        std::cout << "\e[1;32mSend initiated: " << FormatMoney(sendAmount) << " " << units << "\e[0m" << std::flush;
+
+        // Track the operation
+        pendingSendOpId = opid;
+        pendingSendTxId.SetNull();
+        hasPendingSend.store(true);
+        sendInProgress.store(false);
+
+        MilliSleep(2000);
+        std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+
+    } catch (const UniValue& e) {
+        std::string errMsg = find_value(e, "message").get_str();
+        std::cout << "\e[" << inputRow << ";1H\e[K";
+        std::cout << "\e[1;31mError: " << errMsg << "\e[0m" << std::flush;
+        sendInProgress.store(false);
+        MilliSleep(3000);
+        std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+    } catch (const std::exception& e) {
+        std::cout << "\e[" << inputRow << ";1H\e[K";
+        std::cout << "\e[1;31mError: " << e.what() << "\e[0m" << std::flush;
+        sendInProgress.store(false);
+        MilliSleep(3000);
+        std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+    }
+
+#ifndef WIN32
+    enableRawMode();
+#endif
+}
+
 // Get first 3 unified addresses for account 0 (indices 0, 1, 2)
 static std::vector<std::string> getShieldedAddresses()
 {
@@ -1809,7 +2145,265 @@ static std::vector<std::string> getShieldedAddresses()
     return addresses;
 }
 
+// Get recent transactions for wallet menu display
+static std::vector<TxDisplayInfo> getRecentTransactions(int count)
+{
+    std::vector<TxDisplayInfo> result;
+    if (!pwalletMain) return result;
 
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+
+    // Collect all wallet transactions with their info
+    std::vector<std::pair<int64_t, TxDisplayInfo>> txList;
+
+    for (const auto& entry : pwalletMain->mapWallet) {
+        const CWalletTx& wtx = entry.second;
+        TxDisplayInfo info;
+        info.txid = entry.first;
+        info.confirmations = wtx.GetDepthInMainChain(std::nullopt);
+        info.timestamp = wtx.GetTxTime();
+
+        // Calculate net amount (credit - debit)
+        CAmount debit = wtx.GetDebit(ISMINE_ALL);
+        CAmount credit = wtx.GetCredit(std::nullopt, ISMINE_ALL);
+
+        // Determine transaction type
+        if (wtx.IsCoinBase()) {
+            info.type = "Mining";
+            info.amount = credit;
+        } else if (debit > 0 && credit > 0) {
+            // Has both debit and credit - could be shield or internal transfer
+            if (debit > credit) {
+                // Outgoing (including fee)
+                info.type = "Sent";
+                info.amount = -(debit - credit);
+            } else {
+                // Shielding or receiving change
+                info.type = "Shield";
+                info.amount = credit - debit;
+            }
+        } else if (debit > 0) {
+            info.type = "Sent";
+            info.amount = -debit;
+        } else if (credit > 0) {
+            info.type = "Received";
+            info.amount = credit;
+        } else {
+            // Skip transactions with no movement
+            continue;
+        }
+
+        // Use confirmation depth and timestamp for sorting
+        // More confirmations = older, so we use negative confirmations for sorting
+        // Unconfirmed (depth 0 or -1) sort first with high values
+        int64_t sortKey;
+        if (info.confirmations <= 0) {
+            // Unconfirmed or conflicted - use timestamp (more recent = higher)
+            sortKey = std::numeric_limits<int64_t>::max() - (std::numeric_limits<int64_t>::max() - info.timestamp);
+        } else {
+            // Confirmed - fewer confirmations = more recent = higher sort key
+            sortKey = std::numeric_limits<int64_t>::max() - info.confirmations;
+        }
+
+        txList.push_back({sortKey, info});
+    }
+
+    // Sort by sort key descending (most recent first)
+    std::sort(txList.begin(), txList.end(),
+        [](const auto& a, const auto& b) { return a.first > b.first; });
+
+    // Return first 'count' transactions
+    for (size_t i = 0; i < std::min(txList.size(), (size_t)count); i++) {
+        result.push_back(txList[i].second);
+    }
+
+    return result;
+}
+
+// Print wallet menu screen (called when currentScreen == WALLET)
+static int printWalletMenu(int rows, int cols)
+{
+    int lines = 0;
+
+    // Check pending operations
+    checkPendingShield();
+    checkPendingSend();
+
+    // WALLET header
+    drawBoxTop("WALLET");
+    lines++;
+
+    if (pwalletMain) {
+        // Get transparent (mined) balances
+        CAmount immature = pwalletMain->GetImmatureBalance(std::nullopt);
+        CAmount mature = pwalletMain->GetBalance(std::nullopt);
+
+        // Calculate locked coinbase value (coins being shielded)
+        CAmount lockedCoinbaseValue = 0;
+        {
+            LOCK2(cs_main, pwalletMain->cs_wallet);
+            for (const auto& outpoint : pwalletMain->setLockedCoins) {
+                auto it = pwalletMain->mapWallet.find(outpoint.hash);
+                if (it != pwalletMain->mapWallet.end()) {
+                    const CWalletTx& wtx = it->second;
+                    if (outpoint.n < wtx.vout.size()) {
+                        lockedCoinbaseValue += wtx.vout[outpoint.n].nValue;
+                    }
+                }
+            }
+        }
+
+        // Display balance excludes locked coins
+        CAmount displayMature = mature - lockedCoinbaseValue;
+        if (displayMature < 0) displayMature = 0;
+
+        // Update flags for controls display
+        hasShieldableCoins.store(displayMature > 0);
+        hasLockedCoins.store(lockedCoinbaseValue > 0);
+
+        // Get shielded balances (same as printWalletStatus)
+        CAmount shieldedSpendable = 0;
+        CAmount shieldedConfirming = 0;
+        CAmount shieldedUnconfirmed = 0;
+
+        {
+            LOCK2(cs_main, pwalletMain->cs_wallet);
+            auto selector = pwalletMain->ZTXOSelectorForAccount(0, false, TransparentCoinbasePolicy::Allow);
+            if (selector.has_value()) {
+                auto sumShieldedInputs = [](const SpendableInputs& inputs) {
+                    CAmount total = 0;
+                    for (const auto& t : inputs.saplingNoteEntries) {
+                        total += t.note.value();
+                    }
+                    for (const auto& t : inputs.orchardNoteMetadata) {
+                        total += t.GetNoteValue();
+                    }
+                    return total;
+                };
+
+                auto spendableInputs = pwalletMain->FindSpendableInputs(selector.value(), 10, std::nullopt);
+                shieldedSpendable = sumShieldedInputs(spendableInputs);
+
+                auto confirmedInputs = pwalletMain->FindSpendableInputs(selector.value(), 1, std::nullopt);
+                CAmount totalConfirmed = sumShieldedInputs(confirmedInputs);
+                shieldedConfirming = totalConfirmed - shieldedSpendable;
+
+                auto allInputs = pwalletMain->FindSpendableInputs(selector.value(), 0, std::nullopt);
+                CAmount totalAll = sumShieldedInputs(allInputs);
+                shieldedUnconfirmed = totalAll - totalConfirmed;
+            }
+        }
+
+        std::string units = Params().CurrencyUnits();
+
+        // Display balances
+        drawRow("Shielded Balance", strprintf("%s %s", FormatMoney(shieldedSpendable), units.c_str()));
+        lines++;
+        if (shieldedConfirming > 0) {
+            drawRow("Shielded Confirming", strprintf("%s %s", FormatMoney(shieldedConfirming), units.c_str()));
+            lines++;
+        }
+        if (shieldedUnconfirmed > 0) {
+            drawRow("Shielded Unconfirmed", strprintf("%s %s", FormatMoney(shieldedUnconfirmed), units.c_str()));
+            lines++;
+        }
+        drawRow("Mined Mature", strprintf("%s %s", FormatMoney(displayMature), units.c_str()));
+        lines++;
+        if (immature > 0) {
+            drawRow("Mined Immature", strprintf("%s %s", FormatMoney(immature), units.c_str()));
+            lines++;
+        }
+    } else {
+        drawRow("Status", "Wallet not loaded");
+        lines++;
+    }
+
+    drawBoxBottom();
+    lines++;
+    std::cout << std::endl;
+    lines++;
+
+    // Recent Transactions Section
+    drawBoxTop("RECENT TRANSACTIONS");
+    lines++;
+
+    auto transactions = getRecentTransactions(10);
+    if (transactions.empty()) {
+        drawCentered("No transactions yet");
+        lines++;
+    } else {
+        std::string units = Params().CurrencyUnits();
+        for (const auto& tx : transactions) {
+            // Format: +/-amount  type  conf/10  timestamp
+            std::string amountStr;
+            std::string amountColor;
+            if (tx.amount >= 0) {
+                amountStr = "+" + FormatMoney(tx.amount);
+                amountColor = "\e[1;32m";  // Green for positive
+            } else {
+                amountStr = FormatMoney(tx.amount);  // Already has - sign
+                amountColor = "\e[1;31m";  // Red for negative
+            }
+
+            // Confirmation display: X/10 or checkmark for 10+
+            std::string confStr;
+            std::string confColor;
+            if (tx.confirmations >= 10) {
+                confStr = "10/10";
+                confColor = "\e[1;32m";  // Green
+            } else if (tx.confirmations > 0) {
+                confStr = strprintf("%d/10", tx.confirmations);
+                confColor = "\e[1;33m";  // Yellow
+            } else {
+                confStr = "0/10";
+                confColor = "\e[1;33m";  // Yellow
+            }
+
+            // Type with consistent width
+            std::string typeStr = tx.type;
+            while (typeStr.length() < 8) typeStr += " ";
+
+            // Build the transaction line
+            std::string txLine = strprintf("%s%s %s\e[0m  %s  %s%s\e[0m",
+                amountColor.c_str(), amountStr.c_str(), units.c_str(),
+                typeStr.c_str(),
+                confColor.c_str(), confStr.c_str());
+
+            drawCentered(txLine);
+            lines++;
+        }
+    }
+
+    drawBoxBottom();
+    lines++;
+    std::cout << std::endl;
+    lines++;
+
+    // Controls
+    drawBoxTop("");
+    lines++;
+
+    // Build control line
+    std::string sendLabel = hasPendingSend.load() ? "\e[1;33mPROCESSING\e[0m" : "Send";
+    std::string shieldLabel;
+    if (hasPendingShield.load()) {
+        shieldLabel = "\e[1;33mPROCESSING\e[0m";
+    } else if (hasShieldableCoins.load()) {
+        shieldLabel = "Shield";
+    } else {
+        shieldLabel = "\e[1;30mShield\e[0m";  // Gray out when no coins
+    }
+
+    std::string controls = strprintf("\e[1;37m[S]\e[0m %s   \e[1;37m[Z]\e[0m %s   \e[1;37m[ESC]\e[0m Back",
+        sendLabel.c_str(), shieldLabel.c_str());
+    drawCentered(controls);
+    lines++;
+
+    drawBoxBottom();
+    lines++;
+
+    return lines;
+}
 
 int printMetrics(size_t cols, bool mining)
 {
@@ -3347,9 +3941,15 @@ void ThreadShowMetricsScreen()
 #endif
 
         if (loaded) {
-            lines += printStats(metricsStats.value(), isScreen, mining);
-            lines += printWalletStatus();
-            lines += printMiningStatus(mining);
+            if (currentScreen.load() == MetricsScreen::WALLET) {
+                // Wallet submenu screen
+                lines += printWalletMenu(rows, cols);
+            } else {
+                // Main metrics screen
+                lines += printStats(metricsStats.value(), isScreen, mining);
+                lines += printWalletStatus();
+                lines += printMiningStatus(mining);
+            }
         }
         lines += printMetrics(cols, mining);
         lines += printMessageBox(cols);
@@ -3373,77 +3973,104 @@ void ThreadShowMetricsScreen()
             // Check for keyboard input
             if (isScreen && isTTY) {
                 int key = checkKeyPress();
-                if (key == 'Q' || key == 'q') {
-                    // Wait for mining stop to complete before shutdown
-                    if (miningStopInProgress.load()) {
-                        std::cout << std::endl << "Waiting for mining threads to stop..." << std::flush;
-                        while (miningStopInProgress.load()) {
-                            MilliSleep(100);
+
+                // Handle keys based on current screen
+                if (currentScreen.load() == MetricsScreen::WALLET) {
+                    // WALLET SUBMENU KEY HANDLERS
+                    if (key == 27) {  // ESC key
+                        currentScreen.store(MetricsScreen::MAIN);
+                        forceFullClear = true;
+                        break;
+                    } else if (key == 'S' || key == 's') {
+                        // Send transaction
+                        if (!hasPendingSend.load()) {
+                            promptSendTransaction(rows);
+                            forceFullClear = true;
+                            break;
                         }
-                        std::cout << " done." << std::endl;
-                    }
-                    // Quit the daemon gracefully
-                    std::cout << std::endl << "Shutting down, please wait..." << std::endl << std::endl;
-                    StartShutdown();
-                    return;
-                } else if (key == 'M' || key == 'm') {
-                    toggleMining();
-                    forceFullClear = true;
-                    break;
-                } else if (key == 'T' || key == 't') {
-                    // Only allow changing threads if mining or on non-main network
-                    if (mining || Params().NetworkIDString() != "main") {
-                        promptForThreads(rows);
+                    } else if (key == 'Z' || key == 'z') {
+                        // Shield mined coins
+                        if (hasShieldableCoins.load() && !hasPendingShield.load()) {
+                            shieldCoinbase(rows);
+                            forceFullClear = true;
+                            break;
+                        }
+                    } else if (key == ' ') {
                         forceFullClear = true;
                         break;
                     }
-                // Benchmark disabled for now
-                // } else if (key == 'B' || key == 'b') {
-                //     // Toggle benchmark mode
-                //     if (mining) {
-                //         toggleBenchmark(rows);
-                //         forceFullClear = true;
-                //         break;
-                //     }
-                } else if (key == 'E' || key == 'e') {
-                    toggleAddressExpansion();
-                    forceFullClear = true;
-                    break;
-                } else if (key == 'S' || key == 's') {
-                    // Only process if there are shieldable coins and no pending shield
-                    if (hasShieldableCoins.load() && !hasPendingShield.load()) {
-                        shieldCoinbase(rows);
+                } else {
+                    // MAIN SCREEN KEY HANDLERS
+                    if (key == 'Q' || key == 'q') {
+                        // Wait for mining stop to complete before shutdown
+                        if (miningStopInProgress.load()) {
+                            std::cout << std::endl << "Waiting for mining threads to stop..." << std::flush;
+                            while (miningStopInProgress.load()) {
+                                MilliSleep(100);
+                            }
+                            std::cout << " done." << std::endl;
+                        }
+                        // Quit the daemon gracefully
+                        std::cout << std::endl << "Shutting down, please wait..." << std::endl << std::endl;
+                        StartShutdown();
+                        return;
+                    } else if (key == 'W' || key == 'w') {
+                        // Enter wallet submenu
+                        currentScreen.store(MetricsScreen::WALLET);
                         forceFullClear = true;
                         break;
-                    }
-                } else if (key == ' ') {
-                    forceFullClear = true;
-                    break;
-                } else if (mining) {
-                    // Mining mode controls only available when mining
-                    if (key == 'R' || key == 'r') {
-                        toggleFastMode();  // Toggles between LIGHT and FAST
+                    } else if (key == 'M' || key == 'm') {
+                        toggleMining();
                         forceFullClear = true;
                         break;
-                    } else if (key == 'H' || key == 'h') {
-                        toggleHugepages();
-                        forceFullClear = true;
-                        break;
-                    }
-                    // Donation key handlers disabled for now
-                    // } else if (key == 'D' || key == 'd') {
-                    //     toggleDonation();
-                    //     forceFullClear = true;
-                    //     break;
-                    // } else if (key == 'P' || key == 'p') {
-                    //     // Only allow changing percentage if donations are active
-                    //     int currentPct = getCurrentDonationPercentage();
-                    //     if (currentPct > 0) {
-                    //         promptForPercentage(rows);
+                    } else if (key == 'T' || key == 't') {
+                        // Only allow changing threads if mining or on non-main network
+                        if (mining || Params().NetworkIDString() != "main") {
+                            promptForThreads(rows);
+                            forceFullClear = true;
+                            break;
+                        }
+                    // Benchmark disabled for now
+                    // } else if (key == 'B' || key == 'b') {
+                    //     // Toggle benchmark mode
+                    //     if (mining) {
+                    //         toggleBenchmark(rows);
                     //         forceFullClear = true;
                     //         break;
                     //     }
-                    // }
+                    } else if (key == 'E' || key == 'e') {
+                        toggleAddressExpansion();
+                        forceFullClear = true;
+                        break;
+                    } else if (key == ' ') {
+                        forceFullClear = true;
+                        break;
+                    } else if (mining) {
+                        // Mining mode controls only available when mining
+                        if (key == 'R' || key == 'r') {
+                            toggleFastMode();  // Toggles between LIGHT and FAST
+                            forceFullClear = true;
+                            break;
+                        } else if (key == 'H' || key == 'h') {
+                            toggleHugepages();
+                            forceFullClear = true;
+                            break;
+                        }
+                        // Donation key handlers disabled for now
+                        // } else if (key == 'D' || key == 'd') {
+                        //     toggleDonation();
+                        //     forceFullClear = true;
+                        //     break;
+                        // } else if (key == 'P' || key == 'p') {
+                        //     // Only allow changing percentage if donations are active
+                        //     int currentPct = getCurrentDonationPercentage();
+                        //     if (currentPct > 0) {
+                        //         promptForPercentage(rows);
+                        //         forceFullClear = true;
+                        //         break;
+                        //     }
+                        // }
+                    }
                 }
             }
 
