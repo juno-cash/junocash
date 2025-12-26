@@ -104,6 +104,24 @@ UniValue getlocalsolps(const UniValue& params, bool fHelp)
     return GetLocalSolPS();
 }
 
+UniValue getlocalhashps(const UniValue& params, bool fHelp)
+{
+    if (fHelp)
+        throw runtime_error(
+            "getlocalhashps\n"
+            "\nReturns the average local hashes per second since this node was started.\n"
+            "This is the same information shown on the metrics screen (if enabled).\n"
+            "\nResult:\n"
+            "xxx.xxxxx     (numeric) Hashes per second average\n"
+            "\nExamples:\n"
+            + HelpExampleCli("getlocalhashps", "")
+            + HelpExampleRpc("getlocalhashps", "")
+       );
+
+    LOCK(cs_main);
+    return GetLocalSolPS();
+}
+
 UniValue getnetworksolps(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() > 2)
@@ -385,9 +403,10 @@ UniValue getmininginfo(const UniValue& params, bool fHelp)
     obj.pushKV("errors",           warnings.first);
     obj.pushKV("errorstimestamp",  warnings.second);
     obj.pushKV("genproclimit",     (int)GetArg("-genproclimit", DEFAULT_GENERATE_THREADS));
+    obj.pushKV("localhashps",      getlocalhashps(params, false));
     obj.pushKV("localsolps"  ,     getlocalsolps(params, false));
+    obj.pushKV("networkhashps",    getnetworkhashps(params, false));
     obj.pushKV("networksolps",     getnetworksolps(params, false));
-    obj.pushKV("networkhashps",    getnetworksolps(params, false));
     obj.pushKV("pooledtx",         (uint64_t)mempool.size());
     obj.pushKV("testnet",          Params().TestnetToBeDeprecatedFieldRPC());
     obj.pushKV("chain",            Params().NetworkIDString());
@@ -1101,7 +1120,8 @@ UniValue getblocksubsidy(const UniValue& params, bool fHelp)
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafeMode
   //  --------------------- ------------------------  -----------------------  ----------
-    { "mining",             "getlocalsolps",          &getlocalsolps,          true  },
+    { "hidden",             "getlocalsolps",          &getlocalsolps,          true  },
+    { "mining",             "getlocalhashps",         &getlocalhashps,         true  },
     { "hidden",             "getnetworksolps",        &getnetworksolps,        true  },
     { "mining",             "getnetworkhashps",       &getnetworkhashps,       true  },
     { "mining",             "getmininginfo",          &getmininginfo,          true  },
