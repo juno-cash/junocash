@@ -970,6 +970,12 @@ void static BlockTemplateUpdater(const CChainParams& chainparams)
             updateNeeded = true; // Mempool changed (throttle 5s)
             LogPrint("miner", "BlockTemplateUpdater: Mempool changed, will update template\n");
         }
+        // On testnet, force refresh every 60 seconds even if mempool unchanged
+        // (prevents stale templates on quiet networks with few transactions)
+        if (chainparams.NetworkIDString() == "test" && nLastUpdateTime > 0 && GetTime() - nLastUpdateTime > 60) {
+            updateNeeded = true;
+            LogPrint("miner", "BlockTemplateUpdater: Testnet max template age reached, will refresh\n");
+        }
 
         if (!updateNeeded) {
             LogPrint("miner", "BlockTemplateUpdater: No update needed, sleeping...\n");
