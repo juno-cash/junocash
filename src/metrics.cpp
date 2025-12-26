@@ -2248,11 +2248,13 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
         }
 
         // For unconfirmed transactions, GetFilteredNotes might not have them yet
-        // Check orchardTxMeta as a fallback to detect pending shielded transactions
+        // Check orchardTxMeta and bundle as fallback to detect pending shielded transactions
         bool hasPendingOrchardNotes = false;
         bool hasPendingOrchardSpends = false;
+        bool hasOrchardActions = (wtx.GetOrchardBundle().GetNumActions() > 0);
+
         if (!wtx.orchardTxMeta.GetMyActionIVKs().empty()) {
-            // We have Orchard notes in this transaction
+            // We have Orchard notes we can decrypt in this transaction
             if (shieldedReceived == 0) {
                 hasPendingOrchardNotes = true;
                 // Estimate received amount for shielding (t->z)
@@ -2264,6 +2266,15 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
         // Check for pending Orchard spends (z->z send that we initiated)
         if (shieldedSpent == 0 && !wtx.orchardTxMeta.GetActionsSpendingMyNotes().empty()) {
             hasPendingOrchardSpends = true;
+        }
+        // For unconfirmed Orchard transactions where metadata isn't populated yet,
+        // check if we're the sender by looking at transaction origin
+        if (!hasPendingOrchardSpends && hasOrchardActions && info.confirmations <= 0) {
+            // If it's unconfirmed and has Orchard actions, and we created it (in our wallet)
+            // treat it as a pending send if there's no transparent debit (pure z->z)
+            if (tDebit == 0 && tCredit == 0 && shieldedReceived == 0 && shieldedSpent == 0) {
+                hasPendingOrchardSpends = true;
+            }
         }
 
         // Determine transaction type based on flows
