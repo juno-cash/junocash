@@ -2238,19 +2238,6 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
             shieldedReceived = it->second;
         }
 
-        // For unconfirmed transactions, GetFilteredNotes might not have them yet
-        // Check orchardTxMeta as a fallback to detect pending shielded receipts
-        bool hasPendingOrchardNotes = false;
-        if (shieldedReceived == 0 && !wtx.orchardTxMeta.GetMyActionIVKs().empty()) {
-            hasPendingOrchardNotes = true;
-            // We know we have notes but don't know the exact value yet
-            // Estimate shielded amount as (tDebit - tCredit) which is approximate
-            if (tDebit > tCredit) {
-                // This looks like a shielding transaction waiting to confirm
-                shieldedReceived = tDebit - tCredit;  // Approximate (actual includes fee)
-            }
-        }
-
         // Get shielded spent amount using RecoverOrchardActions
         CAmount shieldedSpent = 0;
         if (wtx.GetOrchardBundle().GetNumActions() > 0) {
@@ -2258,6 +2245,25 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
             for (const auto& [_, spend] : orchardActions.GetSpends()) {
                 shieldedSpent += spend.GetNoteValue();
             }
+        }
+
+        // For unconfirmed transactions, GetFilteredNotes might not have them yet
+        // Check orchardTxMeta as a fallback to detect pending shielded transactions
+        bool hasPendingOrchardNotes = false;
+        bool hasPendingOrchardSpends = false;
+        if (!wtx.orchardTxMeta.GetMyActionIVKs().empty()) {
+            // We have Orchard notes in this transaction
+            if (shieldedReceived == 0) {
+                hasPendingOrchardNotes = true;
+                // Estimate received amount for shielding (t->z)
+                if (tDebit > tCredit) {
+                    shieldedReceived = tDebit - tCredit;
+                }
+            }
+        }
+        // Check for pending Orchard spends (z->z send that we initiated)
+        if (shieldedSpent == 0 && !wtx.orchardTxMeta.GetActionsSpendingMyNotes().empty()) {
+            hasPendingOrchardSpends = true;
         }
 
         // Determine transaction type based on flows
@@ -2303,6 +2309,11 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
         } else if (hasTCredit) {
             info.type = "Received";
             info.amount = tCredit;
+        } else if (hasPendingOrchardSpends) {
+            // Pending Orchard send (0/10 confirmations) - we know we spent notes
+            // but don't have the exact amounts yet
+            info.type = "Sent";
+            info.amount = 0;  // Amount unknown until confirmed
         } else if (hasShieldedSpent || hasShieldedReceived) {
             // Fallback for other shielded activity
             CAmount net = shieldedReceived - shieldedSpent;
@@ -2313,6 +2324,10 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
                 info.type = "Sent";
                 info.amount = net;
             }
+        } else if (hasPendingOrchardNotes && !hasTDebit) {
+            // Pending shielded receive (0/10) - we know we received notes
+            info.type = "Received";
+            info.amount = 0;  // Amount unknown until confirmed
         } else {
             // Skip transactions with no movement
             continue;
