@@ -128,20 +128,17 @@ UniValue getnetworksolps(const UniValue& params, bool fHelp)
 
 UniValue getnetworkhashps(const UniValue& params, bool fHelp)
 {
-    if (!fEnableGetNetworkHashPS || fHelp || params.size() > 2)
+    if (fHelp || params.size() > 2)
         throw runtime_error(
             "getnetworkhashps ( blocks height )\n"
-            + Deprecated(fEnableGetNetworkHashPS,
-                         "getnetworkhashps",
-                         "Please use getnetworksolps instead.") +
-            "\nReturns the estimated network solutions per second based on the last n blocks.\n"
+            "\nReturns the estimated network hashes per second based on the last n blocks.\n"
             "Pass in [blocks] to override # of blocks, -1 specifies over difficulty averaging window.\n"
             "Pass in [height] to estimate the network speed at the time when a certain block was found.\n"
             "\nArguments:\n"
             "1. blocks     (numeric, optional, default=120) The number of blocks, or -1 for blocks over difficulty averaging window.\n"
             "2. height     (numeric, optional, default=-1) To estimate at the time of the given height.\n"
             "\nResult:\n"
-            "x             (numeric) Solutions per second estimated\n"
+            "x             (numeric) Hashes per second estimated\n"
             "\nExamples:\n"
             + HelpExampleCli("getnetworkhashps", "")
             + HelpExampleRpc("getnetworkhashps", "")
@@ -1105,8 +1102,8 @@ static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafeMode
   //  --------------------- ------------------------  -----------------------  ----------
     { "mining",             "getlocalsolps",          &getlocalsolps,          true  },
-    { "mining",             "getnetworksolps",        &getnetworksolps,        true  },
-    { "hidden",             "getnetworkhashps",       &getnetworkhashps,       true  },
+    { "hidden",             "getnetworksolps",        &getnetworksolps,        true  },
+    { "mining",             "getnetworkhashps",       &getnetworkhashps,       true  },
     { "mining",             "getmininginfo",          &getmininginfo,          true  },
     { "mining",             "prioritisetransaction",  &prioritisetransaction,  true  },
     { "mining",             "getblocktemplate",       &getblocktemplate,       true  },
