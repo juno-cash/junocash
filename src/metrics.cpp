@@ -21,6 +21,7 @@
 #include "util/strencodings.h"
 #include "wallet/wallet.h"
 #include "key_io.h"
+#include "zcash/address/zip32.h"
 #include "crypto/randomx_wrapper.h"
 #include "hw/dmi/DmiReader.h"
 
@@ -1807,6 +1808,9 @@ static void shieldCoinbase(int rows)
         shieldingInProgress.store(false);
         MilliSleep(3000);
     }
+
+    // Force full screen redraw after shield operation
+    forceFullClear = true;
 }
 
 // Prompt for send transaction details and execute
@@ -2091,6 +2095,9 @@ static void promptSendTransaction(int rows)
 #ifndef WIN32
     enableRawMode();
 #endif
+
+    // Force full screen redraw after send prompt
+    forceFullClear = true;
 }
 
 // Get first 3 unified addresses for account 0 (indices 0, 1, 2)
@@ -2153,6 +2160,47 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
 
     LOCK2(cs_main, pwalletMain->cs_wallet);
 
+    // Collect OVKs for recovering Orchard output information
+    std::vector<uint256> ovksVector;
+    {
+        std::set<uint256> ovks;
+
+        // Generate the old, pre-UA accounts OVK for recovering t->z outputs
+        HDSeed seed = pwalletMain->GetHDSeedForRPC();
+        ovks.insert(ovkForShieldingFromTaddr(seed));
+
+        // Generate the OVKs for shielding from the legacy UA account
+        auto legacyKey = pwalletMain->GetLegacyAccountKey().ToAccountPubKey();
+        auto legacyAcctOVKs = legacyKey.GetOVKsForShielding();
+        ovks.insert(legacyAcctOVKs.first);
+        ovks.insert(legacyAcctOVKs.second);
+
+        // Generate the OVKs for all unified key components
+        for (const auto& [_, ufvkid] : pwalletMain->mapUnifiedAccountKeys) {
+            auto ufvk = pwalletMain->GetUnifiedFullViewingKey(ufvkid);
+            if (ufvk.has_value()) {
+                auto tkey = ufvk.value().GetTransparentKey();
+                if (tkey.has_value()) {
+                    auto tovks = tkey.value().GetOVKsForShielding();
+                    ovks.insert(tovks.first);
+                    ovks.insert(tovks.second);
+                }
+                auto skey = ufvk.value().GetSaplingKey();
+                if (skey.has_value()) {
+                    auto sovks = skey.value().GetOVKs();
+                    ovks.insert(sovks.first);
+                    ovks.insert(sovks.second);
+                }
+                auto okey = ufvk.value().GetOrchardKey();
+                if (okey.has_value()) {
+                    ovks.insert(okey.value().ToExternalOutgoingViewingKey());
+                    ovks.insert(okey.value().ToInternalOutgoingViewingKey());
+                }
+            }
+        }
+        ovksVector.assign(ovks.begin(), ovks.end());
+    }
+
     // Collect all wallet transactions with their info
     std::vector<std::pair<int64_t, TxDisplayInfo>> txList;
 
@@ -2163,31 +2211,85 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
         info.confirmations = wtx.GetDepthInMainChain(std::nullopt);
         info.timestamp = wtx.GetTxTime();
 
-        // Calculate net amount (credit - debit)
-        CAmount debit = wtx.GetDebit(ISMINE_ALL);
-        CAmount credit = wtx.GetCredit(std::nullopt, ISMINE_ALL);
+        // Calculate transparent amounts
+        CAmount tDebit = wtx.GetDebit(ISMINE_ALL);
+        CAmount tCredit = wtx.GetCredit(std::nullopt, ISMINE_ALL);
 
-        // Determine transaction type
+        // Calculate shielded (Orchard) amounts
+        CAmount shieldedReceived = 0;  // Notes we received (outputs where !isOutgoing)
+        CAmount shieldedSpent = 0;     // Notes we spent (spends)
+        CAmount shieldedSent = 0;      // Notes we sent to others (outputs where isOutgoing)
+
+        // Check if transaction has Orchard actions
+        if (!wtx.orchardTxMeta.GetMyActionIVKs().empty() || wtx.GetOrchardBundle().GetNumActions() > 0) {
+            OrchardActions orchardActions = wtx.RecoverOrchardActions(ovksVector);
+
+            // Sum spent notes (money leaving our wallet)
+            for (const auto& [_, spend] : orchardActions.GetSpends()) {
+                shieldedSpent += spend.GetNoteValue();
+            }
+
+            // Sum outputs
+            for (const auto& [_, output] : orchardActions.GetOutputs()) {
+                if (output.IsOutgoing()) {
+                    // Sent to someone else
+                    shieldedSent += output.GetNoteValue();
+                } else {
+                    // Received by us (including change)
+                    shieldedReceived += output.GetNoteValue();
+                }
+            }
+        }
+
+        // Determine transaction type based on flows
+        bool hasTDebit = (tDebit > 0);
+        bool hasTCredit = (tCredit > 0);
+        bool hasShieldedSpent = (shieldedSpent > 0);
+        bool hasShieldedReceived = (shieldedReceived > 0);
+        bool hasShieldedSent = (shieldedSent > 0);
+
         if (wtx.IsCoinBase()) {
             info.type = "Mining";
-            info.amount = credit;
-        } else if (debit > 0 && credit > 0) {
-            // Has both debit and credit - could be shield or internal transfer
-            if (debit > credit) {
-                // Outgoing (including fee)
-                info.type = "Sent";
-                info.amount = -(debit - credit);
-            } else {
-                // Shielding or receiving change
-                info.type = "Shield";
-                info.amount = credit - debit;
-            }
-        } else if (debit > 0) {
+            info.amount = tCredit;
+        } else if (hasTDebit && hasShieldedReceived && !hasShieldedSpent && !hasTCredit) {
+            // Transparent -> Shielded (z_shieldcoinbase)
+            info.type = "Shield";
+            // Net effect: we spend transparent and get shielded (minus fee)
+            info.amount = shieldedReceived - tDebit;  // Will be negative due to fee
+        } else if (hasShieldedSpent && hasShieldedSent) {
+            // Shielded send (Orchard -> Orchard)
             info.type = "Sent";
-            info.amount = -debit;
-        } else if (credit > 0) {
+            // Net: spent notes - received change = amount sent + fee
+            info.amount = -(shieldedSpent - shieldedReceived);
+        } else if (hasShieldedReceived && !hasShieldedSpent && !hasTDebit) {
+            // Pure shielded receive
             info.type = "Received";
-            info.amount = credit;
+            info.amount = shieldedReceived;
+        } else if (hasTDebit && hasTCredit) {
+            // Transparent-only transaction
+            if (tDebit > tCredit) {
+                info.type = "Sent";
+                info.amount = -(tDebit - tCredit);
+            } else {
+                info.type = "Received";
+                info.amount = tCredit - tDebit;
+            }
+        } else if (hasTDebit) {
+            info.type = "Sent";
+            info.amount = -tDebit;
+        } else if (hasTCredit) {
+            info.type = "Received";
+            info.amount = tCredit;
+        } else if (hasShieldedSpent || hasShieldedReceived) {
+            // Some other shielded activity
+            CAmount net = shieldedReceived - shieldedSpent;
+            if (net >= 0) {
+                info.type = "Received";
+                info.amount = net;
+            } else {
+                info.type = "Sent";
+                info.amount = net;
+            }
         } else {
             // Skip transactions with no movement
             continue;
@@ -2333,8 +2435,17 @@ static int printWalletMenu(int rows, int cols)
         lines++;
     } else {
         std::string units = Params().CurrencyUnits();
+        int currentHeight = 0;
+        {
+            LOCK(cs_main);
+            currentHeight = chainActive.Height();
+        }
+
         for (const auto& tx : transactions) {
-            // Format: +/-amount  type  conf/10  timestamp
+            // Truncated txid (first 8 chars)
+            std::string txidStr = tx.txid.GetHex().substr(0, 8);
+
+            // Amount with color
             std::string amountStr;
             std::string amountColor;
             if (tx.amount >= 0) {
@@ -2345,16 +2456,22 @@ static int printWalletMenu(int rows, int cols)
                 amountColor = "\e[1;31m";  // Red for negative
             }
 
-            // Confirmation display: X/10 or checkmark for 10+
+            // Block number and confirmation display
+            std::string blockStr;
             std::string confStr;
             std::string confColor;
             if (tx.confirmations >= 10) {
+                int blockHeight = currentHeight - tx.confirmations + 1;
+                blockStr = strprintf("#%d", blockHeight);
                 confStr = "10/10";
                 confColor = "\e[1;32m";  // Green
             } else if (tx.confirmations > 0) {
+                int blockHeight = currentHeight - tx.confirmations + 1;
+                blockStr = strprintf("#%d", blockHeight);
                 confStr = strprintf("%d/10", tx.confirmations);
                 confColor = "\e[1;33m";  // Yellow
             } else {
+                blockStr = "pending";
                 confStr = "0/10";
                 confColor = "\e[1;33m";  // Yellow
             }
@@ -2363,10 +2480,12 @@ static int printWalletMenu(int rows, int cols)
             std::string typeStr = tx.type;
             while (typeStr.length() < 8) typeStr += " ";
 
-            // Build the transaction line
-            std::string txLine = strprintf("%s%s %s\e[0m  %s  %s%s\e[0m",
-                amountColor.c_str(), amountStr.c_str(), units.c_str(),
+            // Build the transaction line: txid amount type block conf
+            std::string txLine = strprintf("\e[0;37m%s\e[0m %s%s\e[0m %s %s %s%s\e[0m",
+                txidStr.c_str(),
+                amountColor.c_str(), amountStr.c_str(),
                 typeStr.c_str(),
+                blockStr.c_str(),
                 confColor.c_str(), confStr.c_str());
 
             drawCentered(txLine);
