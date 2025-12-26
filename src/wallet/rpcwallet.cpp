@@ -178,11 +178,12 @@ UniValue getnewaddress(const UniValue& params, bool fHelp)
             "getnewaddress ( \"\" )\n"
             + Deprecated(fEnableGetNewAddress,
                          "getnewaddress",
-                         "Please use z_getnewaccount and z_getaddressforaccount instead.") +
+                         "In Juno Cash, transparent addresses are only used for mining.\n"
+                         "Use t_getminingaddress to get your mining address.\n"
+                         "For receiving funds, use z_getnewaccount and z_getaddressforaccount to create shielded addresses.") +
             "\nReturns a new transparent Juno Cash address.\n"
-            "Payments received by this API are visible on-chain and do not otherwise\n"
-            "provide privacy protections; they should only be used in circumstances \n"
-            "where it is necessary to interoperate with legacy Bitcoin infrastructure.\n"
+            "In Juno Cash, transparent addresses are only used for mining coinbase rewards.\n"
+            "Mined coins must be shielded using z_shieldcoinbase before they can be spent.\n"
 
             "\nArguments:\n"
             "1. (dummy)       (string, optional) DEPRECATED. If provided, it MUST be set to the empty string \"\". Passing any other string will result in an error.\n"
@@ -447,9 +448,12 @@ UniValue sendtoaddress(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() < 2 || params.size() > 5)
+    if (!fEnableSendToAddress || fHelp || params.size() < 2 || params.size() > 5)
         throw runtime_error(
             "sendtoaddress \"junocashaddress\" amount ( \"comment\" \"comment-to\" subtractfeefromamount )\n"
+            + Deprecated(fEnableSendToAddress,
+                         "sendtoaddress",
+                         "Use z_shieldcoinbase to shield mined coins, then z_send for transfers.") +
             "\nSend an amount to a given transparent address. The amount is interpreted as a real number\n"
             "and is rounded to the nearest 0.00000001. This API will only select funds from the transparent\n"
             "pool, and all the details of the transaction, including sender, recipient, and amount will be\n"
@@ -1262,15 +1266,17 @@ UniValue sendmany(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() < 2 || params.size() > 5)
+    if (!fEnableSendMany || fHelp || params.size() < 2 || params.size() > 5)
         throw runtime_error(
             "sendmany \"\" {\"address\":amount,...} ( minconf \"comment\" [\"address\",...] )\n"
+            + Deprecated(fEnableSendMany,
+                         "sendmany",
+                         "Use z_shieldcoinbase to shield mined coins, then z_sendmany for transfers.") +
             "\nSend to multiple transparent recipients, using funds from the legacy transparent\n"
             "value pool. Amounts are decimal numbers with at most 8 digits of precision.\n"
             "Payments sent using this API are visible on-chain and do not otherwise\n"
             "provide privacy protections; it should only be used in circumstances \n"
             "where it is necessary to interoperate with legacy Bitcoin infrastructure.\n"
-            "Prefer to use `z_sendmany` instead.\n"
             + HelpRequiringPassphrase() + "\n"
             "\nArguments:\n"
             "1. \"dummy\"               (string, required) Must be set to \"\" for backwards compatibility.\n"
@@ -1682,9 +1688,12 @@ UniValue listtransactions(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() > 5)
+    if (!fEnableListTransactions || fHelp || params.size() > 5)
         throw runtime_error(
             "listtransactions ( \"dummy\" count from includeWatchonly asOfHeight)\n"
+            + Deprecated(fEnableListTransactions,
+                         "listtransactions",
+                         "Use z_listreceivedbyaddress for shielded transaction history, or z_viewtransaction for details.") +
             "\nReturns up to 'count' of the most recent transactions associated with legacy transparent\n"
             "addresses of this wallet, skipping the first 'from' transactions.\n"
             "\nThis API does not provide any information about transactions containing shielded inputs\n"
@@ -1805,9 +1814,12 @@ UniValue listsinceblock(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() > 6)
+    if (!fEnableListSinceBlock || fHelp || params.size() > 6)
         throw runtime_error(
             "listsinceblock ( \"blockhash\" target-confirmations includeWatchonly includeRemoved includeChange asOfHeight )\n"
+            + Deprecated(fEnableListSinceBlock,
+                         "listsinceblock",
+                         "Use z_listreceivedbyaddress for shielded transaction history.") +
             "\nGet all transactions in blocks since block [blockhash], or all transactions if omitted\n"
             "\nArguments:\n"
             "1. \"blockhash\"   (string, optional) The block hash to list transactions since\n"
@@ -1919,9 +1931,12 @@ UniValue gettransaction(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() < 1 || params.size() > 4)
+    if (!fEnableGetTransaction || fHelp || params.size() < 1 || params.size() > 4)
         throw runtime_error(
             "gettransaction \"txid\" ( includeWatchonly verbose asOfHeight )\n"
+            + Deprecated(fEnableGetTransaction,
+                         "gettransaction",
+                         "Use z_viewtransaction for complete transaction details.") +
             "\nReturns detailed information about in-wallet transaction <txid>. This does not\n"
             "include complete information about shielded components of the transaction; to obtain\n"
             "details about shielded components of the transaction use `z_viewtransaction`.\n"
@@ -5200,29 +5215,34 @@ UniValue z_send(const UniValue& params, bool fHelp)
 }
 
 UniValue z_setmigration(const UniValue& params, bool fHelp) {
-    if (!EnsureWalletIsAvailable(fHelp))
-        return NullUniValue;
-    if (fHelp || params.size() != 1)
+    // Sprout to Sapling migration is not supported in Juno Cash
+    if (fHelp)
         throw runtime_error(
-            "z_setmigration enabled\n"
-            "When enabled the Sprout to Sapling migration will attempt to migrate all funds from this wallet’s\n"
-            "Sprout addresses to either the address for Sapling account 0 or the address specified by the parameter\n"
-            "'-migrationdestaddress'.\n"
-            "\n"
-            "This migration is designed to minimize information leakage. As a result for wallets with a significant\n"
-            "Sprout balance, this process may take several weeks. The migration works by sending, up to 5, as many\n"
-            "transactions as possible whenever the blockchain reaches a height equal to 499 modulo 500. The transaction\n"
-            "amounts are picked according to the random distribution specified in ZIP 308. The migration will end once\n"
-            "the wallet’s Sprout balance is below " + strprintf("%s %s", FormatMoney(CENT), CURRENCY_UNIT) + ".\n"
-            "\nArguments:\n"
-            "1. enabled  (boolean, required) 'true' or 'false' to enable or disable respectively.\n"
+            "z_setmigration\n"
+            "\nNot supported in Juno Cash.\n"
+            "Juno Cash does not support Sprout or Sapling transactions.\n"
         );
-    LOCK(pwalletMain->cs_wallet);
-    pwalletMain->fSaplingMigrationEnabled = params[0].get_bool();
-    return NullUniValue;
+
+    throw JSONRPCError(RPC_INVALID_REQUEST,
+        "z_setmigration is not supported in Juno Cash. "
+        "Juno Cash does not support Sprout or Sapling transactions.");
 }
 
 UniValue z_getmigrationstatus(const UniValue& params, bool fHelp) {
+    // Sprout to Sapling migration is not supported in Juno Cash
+    if (fHelp)
+        throw runtime_error(
+            "z_getmigrationstatus\n"
+            "\nNot supported in Juno Cash.\n"
+            "Juno Cash does not support Sprout or Sapling transactions.\n"
+        );
+
+    throw JSONRPCError(RPC_INVALID_REQUEST,
+        "z_getmigrationstatus is not supported in Juno Cash. "
+        "Juno Cash does not support Sprout or Sapling transactions.");
+
+    // Original code disabled - kept for reference during code maintenance
+    if (false) {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
     if (fHelp || params.size() > 1)
@@ -5329,6 +5349,7 @@ UniValue z_getmigrationstatus(const UniValue& params, bool fHelp) {
     }
     migrationStatus.pushKV("migration_txids", migrationTxids);
     return migrationStatus;
+    } // end if (false)
 }
 
 UniValue z_shieldcoinbase(const UniValue& params, bool fHelp)
@@ -5529,9 +5550,12 @@ UniValue z_mergetoaddress(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() < 2 || params.size() > 6)
+    if (!fEnableZMergeToAddress || fHelp || params.size() < 2 || params.size() > 6)
         throw runtime_error(
             "z_mergetoaddress [\"fromaddress\", ... ] \"toaddress\" ( fee ) ( transparent_limit ) ( shielded_limit ) ( memo )\n"
+            + Deprecated(fEnableZMergeToAddress,
+                         "z_mergetoaddress",
+                         "Use z_sendmany to consolidate notes by sending to yourself.") +
             "\nMerge multiple UTXOs and notes into a single UTXO or note.  Coinbase UTXOs are ignored; use `z_shieldcoinbase`"
             "\nto combine those into a single note."
             "\n\nThis is an asynchronous operation, and UTXOs selected for merging will be locked.  If there is an error, they"
@@ -6074,62 +6098,62 @@ static const CRPCCommand commands[] =
     //  --------------------- ------------------------    -----------------------    ----------
     { "rawtransactions",    "fundrawtransaction",       &fundrawtransaction,       false },
     { "hidden",             "resendwallettransactions", &resendwallettransactions, true  },
-    { "wallet",             "addmultisigaddress",       &addmultisigaddress,       true  },
+    { "hidden",             "addmultisigaddress",       &addmultisigaddress,       true  },
     { "wallet",             "backupwallet",             &backupwallet,             true  },
-    { "wallet",             "dumpprivkey",              &dumpprivkey,              true  },
+    { "hidden",             "dumpprivkey",              &dumpprivkey,              true  },
     { "hidden",             "dumpwallet",               &dumpwallet,               true  },
     { "wallet",             "encryptwallet",            &encryptwallet,            true  },
-    { "wallet",             "z_converttex",             &z_converttex,             true  },
+    { "hidden",             "z_converttex",             &z_converttex,             true  },
     { "wallet",             "getbalance",               &getbalance,               false },
-    { "wallet",             "getnewaddress",            &getnewaddress,            true  },
+    { "hidden",             "getnewaddress",            &getnewaddress,            true  },
     { "wallet",             "t_getminingaddress",       &t_getminingaddress,       true  },
-    { "wallet",             "getrawchangeaddress",      &getrawchangeaddress,      true  },
-    { "wallet",             "getreceivedbyaddress",     &getreceivedbyaddress,     false },
-    { "wallet",             "gettransaction",           &gettransaction,           false },
+    { "hidden",             "getrawchangeaddress",      &getrawchangeaddress,      true  },
+    { "hidden",             "getreceivedbyaddress",     &getreceivedbyaddress,     false },
+    { "hidden",             "gettransaction",           &gettransaction,           false },
     { "wallet",             "getunconfirmedbalance",    &getunconfirmedbalance,    false },
     { "wallet",             "getwalletinfo",            &getwalletinfo,            false },
-    { "wallet",             "importprivkey",            &importprivkey,            true  },
-    { "wallet",             "importwallet",             &importwallet,             true  },
-    { "wallet",             "importaddress",            &importaddress,            true  },
-    { "wallet",             "importpubkey",             &importpubkey,             true  },
+    { "hidden",             "importprivkey",            &importprivkey,            true  },
+    { "hidden",             "importwallet",             &importwallet,             true  },
+    { "hidden",             "importaddress",            &importaddress,            true  },
+    { "hidden",             "importpubkey",             &importpubkey,             true  },
     { "wallet",             "keypoolrefill",            &keypoolrefill,            true  },
     { "wallet",             "listaddresses",            &listaddresses,            true  },
-    { "wallet",             "listaddressgroupings",     &listaddressgroupings,     false },
+    { "hidden",             "listaddressgroupings",     &listaddressgroupings,     false },
     { "wallet",             "listlockunspent",          &listlockunspent,          false },
-    { "wallet",             "listreceivedbyaddress",    &listreceivedbyaddress,    false },
-    { "wallet",             "listsinceblock",           &listsinceblock,           false },
-    { "wallet",             "listtransactions",         &listtransactions,         false },
+    { "hidden",             "listreceivedbyaddress",    &listreceivedbyaddress,    false },
+    { "hidden",             "listsinceblock",           &listsinceblock,           false },
+    { "hidden",             "listtransactions",         &listtransactions,         false },
     { "wallet",             "listunspent",              &listunspent,              false },
     { "wallet",             "lockunspent",              &lockunspent,              true  },
-    { "wallet",             "sendmany",                 &sendmany,                 false },
-    { "wallet",             "sendtoaddress",            &sendtoaddress,            false },
+    { "hidden",             "sendmany",                 &sendmany,                 false },
+    { "hidden",             "sendtoaddress",            &sendtoaddress,            false },
     { "wallet",             "settxfee",                 &settxfee,                 true  },
     { "wallet",             "signmessage",              &signmessage,              true  },
     { "wallet",             "walletlock",               &walletlock,               true  },
     { "wallet",             "walletpassphrasechange",   &walletpassphrasechange,   true  },
     { "wallet",             "walletpassphrase",         &walletpassphrase,         true  },
     { "wallet",             "walletconfirmbackup",      &walletconfirmbackup,      true  },
-    { "wallet",             "zcbenchmark",              &zc_benchmark,             true  },
-    { "wallet",             "zcsamplejoinsplit",        &zc_sample_joinsplit,      true  },
+    { "hidden",             "zcbenchmark",              &zc_benchmark,             true  },
+    { "hidden",             "zcsamplejoinsplit",        &zc_sample_joinsplit,      true  },
     { "wallet",             "z_listreceivedbyaddress",  &z_listreceivedbyaddress,  false },
     { "wallet",             "z_listunspent",            &z_listunspent,            false },
-    { "wallet",             "z_getbalance",             &z_getbalance,             false },
+    { "hidden",             "z_getbalance",             &z_getbalance,             false },
     { "wallet",             "z_gettotalbalance",        &z_gettotalbalance,        false },
     { "wallet",             "z_getbalanceforviewingkey",&z_getbalanceforviewingkey,false },
     { "wallet",             "z_getbalanceforaccount",   &z_getbalanceforaccount,   false },
-    { "wallet",             "z_mergetoaddress",         &z_mergetoaddress,         false },
+    { "hidden",             "z_mergetoaddress",         &z_mergetoaddress,         false },
     { "wallet",             "z_sendmany",               &z_sendmany,               false },
     { "wallet",             "z_send",                   &z_send,                   false },
-    { "wallet",             "z_setmigration",           &z_setmigration,           false },
-    { "wallet",             "z_getmigrationstatus",     &z_getmigrationstatus,     false },
+    { "hidden",             "z_setmigration",           &z_setmigration,           false },
+    { "hidden",             "z_getmigrationstatus",     &z_getmigrationstatus,     false },
     { "wallet",             "z_shieldcoinbase",         &z_shieldcoinbase,         false },
     { "wallet",             "z_getoperationstatus",     &z_getoperationstatus,     true  },
     { "wallet",             "z_getoperationresult",     &z_getoperationresult,     true  },
     { "wallet",             "z_listoperationids",       &z_listoperationids,       true  },
-    { "wallet",             "z_getnewaddress",          &z_getnewaddress,          true  },
+    { "hidden",             "z_getnewaddress",          &z_getnewaddress,          true  },
     { "wallet",             "z_getnewaccount",          &z_getnewaccount,          true  },
     { "wallet",             "z_listaccounts",           &z_listaccounts,           true  },
-    { "wallet",             "z_listaddresses",          &z_listaddresses,          true  },
+    { "hidden",             "z_listaddresses",          &z_listaddresses,          true  },
     { "wallet",             "z_listunifiedreceivers",   &z_listunifiedreceivers,   true  },
     { "wallet",             "z_getaddressforaccount",   &z_getaddressforaccount,   true  },
     { "wallet",             "z_exportkey",              &z_exportkey,              true  },
@@ -6142,9 +6166,9 @@ static const CRPCCommand commands[] =
     { "wallet",             "z_importwallet",           &z_importwallet,           true  },
     { "wallet",             "z_viewtransaction",        &z_viewtransaction,        false },
     { "wallet",             "z_getnotescount",          &z_getnotescount,          false },
-    // TODO: rearrange into another category
-    { "disclosure",         "z_getpaymentdisclosure",   &z_getpaymentdisclosure,   true  },
-    { "disclosure",         "z_validatepaymentdisclosure", &z_validatepaymentdisclosure, true }
+    // Sprout-era features disabled in Juno Cash
+    { "hidden",             "z_getpaymentdisclosure",   &z_getpaymentdisclosure,   true  },
+    { "hidden",             "z_validatepaymentdisclosure", &z_validatepaymentdisclosure, true }
 };
 
 void OnWalletRPCPreCommand(const CRPCCommand& cmd)

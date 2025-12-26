@@ -1249,18 +1249,18 @@ static const CRPCCommand commands[] =
     { "control",            "getmemoryinfo",          &getmemoryinfo,          true  },
     { "util",               "validateaddress",        &validateaddress,        true  }, /* uses wallet if enabled */
     { "util",               "z_validateaddress",      &z_validateaddress,      true  }, /* uses wallet if enabled */
-    { "util",               "createmultisig",         &createmultisig,         true  },
+    { "hidden",             "createmultisig",         &createmultisig,         true  },
     { "util",               "verifymessage",          &verifymessage,          true  },
     { "control",            "getexperimentalfeatures",&getexperimentalfeatures,true  },
 
-    // START insightexplorer
+    // START insightexplorer (hidden - transparent address index not primary use case for Juno Cash)
     /* Address index */
-    { "addressindex",       "getaddresstxids",        &getaddresstxids,        false }, /* insight explorer */
-    { "addressindex",       "getaddressbalance",      &getaddressbalance,      false }, /* insight explorer */
-    { "addressindex",       "getaddressdeltas",       &getaddressdeltas,       false }, /* insight explorer */
-    { "addressindex",       "getaddressutxos",        &getaddressutxos,        false }, /* insight explorer */
-    { "addressindex",       "getaddressmempool",      &getaddressmempool,      true  }, /* insight explorer */
-    { "blockchain",         "getspentinfo",           &getspentinfo,           false }, /* insight explorer */
+    { "hidden",             "getaddresstxids",        &getaddresstxids,        false }, /* insight explorer */
+    { "hidden",             "getaddressbalance",      &getaddressbalance,      false }, /* insight explorer */
+    { "hidden",             "getaddressdeltas",       &getaddressdeltas,       false }, /* insight explorer */
+    { "hidden",             "getaddressutxos",        &getaddressutxos,        false }, /* insight explorer */
+    { "hidden",             "getaddressmempool",      &getaddressmempool,      true  }, /* insight explorer */
+    { "hidden",             "getspentinfo",           &getspentinfo,           false }, /* insight explorer */
     // END insightexplorer
 
     /* Not shown in help */

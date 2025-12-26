@@ -1106,7 +1106,7 @@ static const CRPCCommand commands[] =
   //  --------------------- ------------------------  -----------------------  ----------
     { "mining",             "getlocalsolps",          &getlocalsolps,          true  },
     { "mining",             "getnetworksolps",        &getnetworksolps,        true  },
-    { "mining",             "getnetworkhashps",       &getnetworkhashps,       true  },
+    { "hidden",             "getnetworkhashps",       &getnetworkhashps,       true  },
     { "mining",             "getmininginfo",          &getmininginfo,          true  },
     { "mining",             "prioritisetransaction",  &prioritisetransaction,  true  },
     { "mining",             "getblocktemplate",       &getblocktemplate,       true  },

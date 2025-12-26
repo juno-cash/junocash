@@ -30,6 +30,13 @@ bool fEnableWalletTxVJoinSplit = true;
 bool fEnableFundRawTransaction = true;
 bool fEnableKeyPoolRefill = true;
 bool fEnableSetTxFee = true;
+// Juno Cash: transparent send operations
+bool fEnableSendToAddress = true;
+bool fEnableSendMany = true;
+bool fEnableListTransactions = true;
+bool fEnableListSinceBlock = true;
+bool fEnableGetTransaction = true;
+bool fEnableZMergeToAddress = true;
 #endif
 
 static const std::string CLIENT_VERSION_STR = FormatVersion(CLIENT_VERSION);
@@ -116,6 +123,13 @@ std::optional<std::string> LoadAllowedDeprecatedFeatures() {
     fEnableZGetTotalBalance = allowdeprecated.count("z_gettotalbalance") > 0;
     fEnableZListAddresses = allowdeprecated.count("z_listaddresses") > 0;
     fEnableWalletTxVJoinSplit = allowdeprecated.count("wallettxvjoinsplit") > 0;
+    // Juno Cash: transparent send operations
+    fEnableSendToAddress = allowdeprecated.count("sendtoaddress") > 0;
+    fEnableSendMany = allowdeprecated.count("sendmany") > 0;
+    fEnableListTransactions = allowdeprecated.count("listtransactions") > 0;
+    fEnableListSinceBlock = allowdeprecated.count("listsinceblock") > 0;
+    fEnableGetTransaction = allowdeprecated.count("gettransaction") > 0;
+    fEnableZMergeToAddress = allowdeprecated.count("z_mergetoaddress") > 0;
 #endif
 
     return std::nullopt;

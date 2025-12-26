@@ -1712,9 +1712,9 @@ static const CRPCCommand commands[] =
     { "blockchain",         "gettxoutsetinfo",        &gettxoutsetinfo,        true  },
     { "blockchain",         "verifychain",            &verifychain,            true  },
 
-    // insightexplorer
-    { "blockchain",         "getblockdeltas",         &getblockdeltas,         false },
-    { "blockchain",         "getblockhashes",         &getblockhashes,         true  },
+    // insightexplorer (hidden - transparent block deltas not primary use case for Juno Cash)
+    { "hidden",             "getblockdeltas",         &getblockdeltas,         false },
+    { "hidden",             "getblockhashes",         &getblockhashes,         true  },
 
     /* Not shown in help */
     { "hidden",             "preciousblock",          &preciousblock,          true  },
