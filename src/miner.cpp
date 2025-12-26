@@ -912,6 +912,7 @@ static inline void IncrementNonce256(uint256& nonce) {
 static std::mutex g_template_mutex;
 static std::unique_ptr<CBlockTemplate> g_shared_template;
 static std::atomic<int> g_template_height{0};
+static std::atomic<uint64_t> g_template_version{0};  // Increments on every template update
 static std::atomic<bool> g_template_stop{false};
 static boost::thread* g_template_thread = nullptr;
 
@@ -970,12 +971,6 @@ void static BlockTemplateUpdater(const CChainParams& chainparams)
             updateNeeded = true; // Mempool changed (throttle 5s)
             LogPrint("miner", "BlockTemplateUpdater: Mempool changed, will update template\n");
         }
-        // On testnet, force refresh every 60 seconds even if mempool unchanged
-        // (prevents stale templates on quiet networks with few transactions)
-        if (chainparams.NetworkIDString() == "test" && nLastUpdateTime > 0 && GetTime() - nLastUpdateTime > 60) {
-            updateNeeded = true;
-            LogPrint("miner", "BlockTemplateUpdater: Testnet max template age reached, will refresh\n");
-        }
 
         if (!updateNeeded) {
             LogPrint("miner", "BlockTemplateUpdater: No update needed, sleeping...\n");
@@ -1015,6 +1010,7 @@ void static BlockTemplateUpdater(const CChainParams& chainparams)
                     if (chainActive.Tip() == pindexCurrent) {
                         g_shared_template = std::move(pblocktemplate);
                         g_template_height = pindexCurrent->nHeight + 1;
+                        g_template_version.fetch_add(1);
 
                         pindexPrev = pindexCurrent;
                         nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
@@ -1124,6 +1120,7 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
 
             // Get shared block template
             int currentHeight = 0;
+            uint64_t currentVersion = 0;
             {
                 std::lock_guard<std::mutex> lock(g_template_mutex);
                 if (!g_shared_template) {
@@ -1132,6 +1129,7 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
                     // Copy block from shared template
                     pblock_copy = g_shared_template->block;
                     currentHeight = g_template_height.load();
+                    currentVersion = g_template_version.load();
                 }
             }
 
@@ -1316,9 +1314,10 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
                     boost::this_thread::interruption_point();
                     interruptCheckCounter = 0;
 
-                    // Check for template update
+                    // Check for template update (height or version change)
                     int latestHeight = g_template_height.load();
-                    if (latestHeight != currentHeight) break;
+                    uint64_t latestVersion = g_template_version.load();
+                    if (latestHeight != currentHeight || latestVersion != currentVersion) break;
 
                     // Also check other conditions that don't need per-hash checking
                     // Note: These are intentionally lock-free for performance in the hot loop.
