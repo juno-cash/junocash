@@ -2010,7 +2010,7 @@ static void promptSendTransaction(int rows)
 
     std::cout << "\e[" << inputRow << ";1H\e[K";
     std::cout << "\e[1;33m=== CONFIRM SEND ===\e[0m" << std::endl;
-    std::cout << "\e[K  To:     " << destAddress.substr(0, 40) << "..." << std::endl;
+    std::cout << "\e[K  To: " << destAddress << std::endl;
     std::cout << "\e[K  Amount: \e[1;32m" << FormatMoney(sendAmount) << " " << units << "\e[0m" << std::endl;
     std::cout << "\e[K  Fee:    " << FormatMoney(estimatedFee) << " " << units << " (estimated)" << std::endl;
     std::cout << "\e[K  After:  " << FormatMoney(remainingBalance) << " " << units << " remaining" << std::endl;
