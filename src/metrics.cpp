@@ -110,9 +110,13 @@ static std::atomic<bool> hasPendingSend{false};
 static std::string pendingSendOpId = "";
 static uint256 pendingSendTxId;
 
+// Error message display (shows briefly then clears)
+static std::string lastErrorMessage = "";
+static int64_t lastErrorTime = 0;
+static const int64_t ERROR_DISPLAY_DURATION = 5;  // Show error for 5 seconds
+
 // Wallet menu state
 static std::atomic<bool> expandTxids{false};  // [E] key toggles full txid display
-static std::string lastTxListHash = "";       // For detecting transaction list changes
 
 // Track previous display state for redraw detection
 static int prevWalletLines = 0;
@@ -1664,10 +1668,18 @@ static void checkPendingShield()
                 std::string txidStr = find_value(result, "txid").get_str();
                 pendingShieldTxId.SetHex(txidStr);
             } else if (operation->isFailed() || operation->isCancelled()) {
-                // Operation failed - clear pending state
+                // Operation failed - store error and clear pending state
+                UniValue error = operation->getError();
+                if (!error.isNull()) {
+                    lastErrorMessage = "Shield failed: " + find_value(error, "message").get_str();
+                } else {
+                    lastErrorMessage = "Shield operation failed";
+                }
+                lastErrorTime = GetTime();
                 hasPendingShield.store(false);
                 pendingShieldOpId = "";
                 pendingShieldTxId.SetNull();
+                forceFullClear = true;
                 return;
             }
             // Still executing - wait
@@ -1707,10 +1719,18 @@ static void checkPendingSend()
                 std::string txidStr = find_value(result, "txid").get_str();
                 pendingSendTxId.SetHex(txidStr);
             } else if (operation->isFailed() || operation->isCancelled()) {
-                // Operation failed - clear pending state
+                // Operation failed - store error and clear pending state
+                UniValue error = operation->getError();
+                if (!error.isNull()) {
+                    lastErrorMessage = "Send failed: " + find_value(error, "message").get_str();
+                } else {
+                    lastErrorMessage = "Send operation failed";
+                }
+                lastErrorTime = GetTime();
                 hasPendingSend.store(false);
                 pendingSendOpId = "";
                 pendingSendTxId.SetNull();
+                forceFullClear = true;
                 return;
             }
             // Still executing - wait
@@ -2285,7 +2305,9 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
 
         if (wtx.IsCoinBase()) {
             info.type = "Mining";
-            info.amount = tCredit;
+            // For immature coinbase, GetCredit returns 0, so use GetImmatureCredit
+            CAmount immatureCredit = wtx.GetImmatureCredit(std::nullopt);
+            info.amount = (tCredit > 0) ? tCredit : immatureCredit;
         } else if (hasTDebit && (hasShieldedReceived || hasPendingOrchardNotes) && !hasShieldedSpent) {
             // Transparent -> Shielded (z_shieldcoinbase)
             // May have transparent change (tCredit > 0) if shielding partial amount
@@ -2488,25 +2510,9 @@ static int printWalletMenu(int rows, int cols)
             currentHeight = chainActive.Height();
         }
 
-        // Build hash of transaction list to detect changes
-        std::string txListHash;
+        bool isExpanded = expandTxids.load();
         for (const auto& tx : transactions) {
-            txListHash += tx.txid.GetHex() + std::to_string(tx.confirmations) + ";";
-        }
-        if (txListHash != lastTxListHash) {
-            lastTxListHash = txListHash;
-            forceFullClear = true;  // Trigger full redraw when tx list changes
-        }
-
-        for (const auto& tx : transactions) {
-            // Txid display (expanded or truncated)
             std::string fullTxid = tx.txid.GetHex();
-            std::string txidStr;
-            if (expandTxids.load()) {
-                txidStr = fullTxid;  // Full 64-char txid
-            } else {
-                txidStr = fullTxid.substr(0, 6) + "..." + fullTxid.substr(fullTxid.length() - 6);
-            }
 
             // Amount with color
             std::string amountStr;
@@ -2543,16 +2549,29 @@ static int printWalletMenu(int rows, int cols)
             std::string typeStr = tx.type;
             while (typeStr.length() < 8) typeStr += " ";
 
-            // Build the transaction line: txid amount type block conf
-            std::string txLine = strprintf("\e[0;37m%s\e[0m %s%s\e[0m %s %s %s%s\e[0m",
-                txidStr.c_str(),
-                amountColor.c_str(), amountStr.c_str(),
-                typeStr.c_str(),
-                blockStr.c_str(),
-                confColor.c_str(), confStr.c_str());
-
-            drawCentered(txLine);
-            lines++;
+            if (isExpanded) {
+                // Expanded: show full txid on one line, details on second line
+                drawCentered(strprintf("\e[0;37m%s\e[0m", fullTxid.c_str()));
+                lines++;
+                std::string detailLine = strprintf("  %s%s\e[0m %s %s %s%s\e[0m",
+                    amountColor.c_str(), amountStr.c_str(),
+                    typeStr.c_str(),
+                    blockStr.c_str(),
+                    confColor.c_str(), confStr.c_str());
+                drawCentered(detailLine);
+                lines++;
+            } else {
+                // Compact: txid...txid amount type block conf on one line
+                std::string txidStr = fullTxid.substr(0, 6) + "..." + fullTxid.substr(fullTxid.length() - 6);
+                std::string txLine = strprintf("\e[0;37m%s\e[0m %s%s\e[0m %s %s %s%s\e[0m",
+                    txidStr.c_str(),
+                    amountColor.c_str(), amountStr.c_str(),
+                    typeStr.c_str(),
+                    blockStr.c_str(),
+                    confColor.c_str(), confStr.c_str());
+                drawCentered(txLine);
+                lines++;
+            }
         }
     }
 
@@ -2581,6 +2600,16 @@ static int printWalletMenu(int rows, int cols)
         sendLabel.c_str(), shieldLabel.c_str(), expandLabel.c_str());
     drawCentered(controls);
     lines++;
+
+    // Show error message if recent
+    if (!lastErrorMessage.empty() && (GetTime() - lastErrorTime) < ERROR_DISPLAY_DURATION) {
+        std::string errorLine = strprintf("\e[1;31m%s\e[0m", lastErrorMessage.c_str());
+        drawCentered(errorLine);
+        lines++;
+    } else if (!lastErrorMessage.empty()) {
+        // Clear old error
+        lastErrorMessage = "";
+    }
 
     drawBoxBottom();
     lines++;
