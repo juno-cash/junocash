@@ -2701,7 +2701,16 @@ int printMessageBox(size_t cols)
     std::cout << _("Messages:") << std::endl;
     for (auto it = u->cbegin(); it != u->cend(); ++it) {
         auto msg = FormatParagraph(*it, cols, 2);
-        std::cout << "- " << msg << std::endl;
+        // Color based on message type
+        std::string color;
+        if (msg.find("Error:") == 0) {
+            color = "\e[1;31m";  // Bright red
+        } else if (msg.find("Warning:") == 0) {
+            color = "\e[1;33m";  // Bright yellow
+        } else if (msg.find("Information:") == 0) {
+            color = "\e[1;36m";  // Bright cyan
+        }
+        std::cout << "- " << color << msg << "\e[0m" << std::endl;
         // Handle newlines and wrapped lines
         size_t i = 0;
         size_t j = 0;
