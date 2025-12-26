@@ -2168,13 +2168,14 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
     // This is more reliable than RecoverOrchardActions for received notes
     std::map<uint256, CAmount> orchardReceivedByTx;
     {
-        std::vector<SproutNoteEntry> sproutEntries;
-        std::vector<SaplingNoteEntry> saplingEntries;
+        // Sprout/Sapling vectors required by API but will be empty (Juno only uses Orchard)
+        std::vector<SproutNoteEntry> unused1;
+        std::vector<SaplingNoteEntry> unused2;
         std::vector<OrchardNoteMetadata> orchardEntries;
 
         // Get all notes including unconfirmed (minDepth=-1) and spent (ignoreSpent=false)
         pwalletMain->GetFilteredNotes(
-            sproutEntries, saplingEntries, orchardEntries,
+            unused1, unused2, orchardEntries,
             std::nullopt,  // no address filter
             std::nullopt,  // no asOfHeight
             -1,            // minDepth: include unconfirmed
