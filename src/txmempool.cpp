@@ -306,9 +306,10 @@ size_t CTxMemPoolEntry::GetUnpaidActionCount() const
     if (tx->IsCoinBase()) {
         return 0;
     } else {
+        CAmount marginalFee = spendsCoinbase ? SHIELDING_MARGINAL_FEE : MARGINAL_FEE;
         return std::max(
             int64_t {0},
-            (int64_t) std::max(GRACE_ACTIONS, tx->GetLogicalActionCount()) - (GetModifiedFee() / MARGINAL_FEE));
+            (int64_t) std::max(GRACE_ACTIONS, tx->GetLogicalActionCount()) - (GetModifiedFee() / marginalFee));
     }
 }
 

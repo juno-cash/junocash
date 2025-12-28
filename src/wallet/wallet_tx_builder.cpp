@@ -92,7 +92,9 @@ CalcZIP317Fee(
             PadCount(saplingOutputCount),
             PadCount(std::max(orchardInputCount, orchardOutputCount)));
 
-    return CalculateConventionalFee(logicalActionCount);
+    bool isShielding = inputs.has_value() && inputs.value().HasTransparentCoinbase();
+    CAmount marginalFee = isShielding ? SHIELDING_MARGINAL_FEE : WALLET_MARGINAL_FEE;
+    return marginalFee * std::max(GRACE_ACTIONS, logicalActionCount);
 }
 
 static tl::expected<ResolvedPayment, AddressResolutionError>

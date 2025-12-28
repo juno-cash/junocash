@@ -14,6 +14,8 @@
 
 // Constants for fee calculation.
 static const CAmount MARGINAL_FEE = 5000;
+static const CAmount SHIELDING_MARGINAL_FEE = 5000;
+static const CAmount WALLET_MARGINAL_FEE = 100000;
 static const size_t GRACE_ACTIONS = 2;
 static const size_t P2PKH_STANDARD_INPUT_SIZE = 150;
 static const size_t P2PKH_STANDARD_OUTPUT_SIZE = 34;
