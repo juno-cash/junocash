@@ -24,6 +24,7 @@
 #include "zcash/address/zip32.h"
 #include "crypto/randomx_wrapper.h"
 #include "hw/dmi/DmiReader.h"
+#include "zip317.h"
 
 #include <boost/range/irange.hpp>
 #include <boost/thread.hpp>
@@ -1961,7 +1962,7 @@ static void promptSendTransaction(int rows)
     }
 
     CAmount sendAmount = 0;
-    CAmount estimatedFee = 10000; // 0.0001 JNO default fee estimate (ZIP 317)
+    CAmount estimatedFee = WALLET_MARGINAL_FEE * GRACE_ACTIONS;
     bool isMax = false;
 
     // Check for "max" or "all"
@@ -2369,14 +2370,15 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
             continue;
         }
 
-        // Use confirmation depth and timestamp for sorting
+        // Use confirmation depth for sorting
+        // Pending (0 confirmations) should be at top, then by fewest confirmations
         int64_t sortKey;
         if (info.confirmations <= 0) {
-            // Unconfirmed or conflicted - use timestamp (more recent = higher)
-            sortKey = std::numeric_limits<int64_t>::max() - (std::numeric_limits<int64_t>::max() - info.timestamp);
+            // Pending: highest priority, use timestamp as tiebreaker
+            sortKey = std::numeric_limits<int64_t>::max() - (GetTime() - info.timestamp);
         } else {
             // Confirmed - fewer confirmations = more recent = higher sort key
-            sortKey = std::numeric_limits<int64_t>::max() - info.confirmations;
+            sortKey = std::numeric_limits<int64_t>::max() - info.confirmations - 1000000;
         }
 
         txList.push_back({sortKey, info});
@@ -2394,6 +2396,12 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
     return result;
 }
 
+// Check if wallet is still syncing (IBD, reindex, or importing)
+static bool isWalletSyncing()
+{
+    return IsInitialBlockDownload(Params().GetConsensus()) || fReindex || fImporting;
+}
+
 // Print wallet menu screen (called when currentScreen == WALLET)
 static int printWalletMenu(int rows, int cols)
 {
@@ -2406,6 +2414,19 @@ static int printWalletMenu(int rows, int cols)
     // WALLET header
     drawBoxTop("WALLET");
     lines++;
+
+    // Show sync status if syncing
+    bool syncing = isWalletSyncing();
+    if (syncing) {
+        int height = 0;
+        {
+            LOCK(cs_main);
+            height = chainActive.Height();
+        }
+        std::string syncMsg = fReindex ? "Reindexing" : "Syncing";
+        drawRow("Status", strprintf("\e[1;33m%s (block %d)\e[0m", syncMsg.c_str(), height));
+        lines++;
+    }
 
     if (pwalletMain) {
         // Get transparent (mined) balances
@@ -2487,6 +2508,26 @@ static int printWalletMenu(int rows, int cols)
             drawRow("Mined Immature", strprintf("%s %s", FormatMoney(immature), units.c_str()));
             lines++;
         }
+
+        // Show receiving address
+        auto addresses = getShieldedAddresses();
+        if (!addresses.empty()) {
+            std::string j1Addr = addresses[0];
+            bool isExpanded = expandTxids.load();
+            if (isExpanded) {
+                std::cout << BOX_VERTICAL << " \e[1;36mReceive Address:\e[0m \e[1;33m" << j1Addr << "\e[0m\e[K" << std::endl;
+                lines++;
+            } else {
+                std::string displayAddr;
+                if (j1Addr.length() > 27) {
+                    displayAddr = j1Addr.substr(0, 12) + "..." + j1Addr.substr(j1Addr.length() - 12);
+                } else {
+                    displayAddr = j1Addr;
+                }
+                drawRow("Receive Address", displayAddr);
+                lines++;
+            }
+        }
     } else {
         drawRow("Status", "Wallet not loaded");
         lines++;
@@ -2560,15 +2601,24 @@ static int printWalletMenu(int rows, int cols)
         for (const auto& tx : transactions) {
             std::string fullTxid = tx.txid.GetHex();
 
+            // Check if unconfirmed (0 confirmations) - dim the entire line
+            bool unconfirmed = (tx.confirmations == 0);
+            std::string dimColor = "\e[1;30m";  // Dark gray for unconfirmed
+
             // Amount with color
             std::string amountStr;
             std::string amountColor;
-            if (tx.amount >= 0) {
-                amountStr = "+" + FormatMoney(tx.amount);
+            if (unconfirmed) {
+                amountColor = dimColor;
+            } else if (tx.amount >= 0) {
                 amountColor = "\e[1;32m";  // Green for positive
             } else {
-                amountStr = FormatMoney(tx.amount);  // Already has - sign
                 amountColor = "\e[1;31m";  // Red for negative
+            }
+            if (tx.amount >= 0) {
+                amountStr = "+" + FormatMoney(tx.amount);
+            } else {
+                amountStr = FormatMoney(tx.amount);  // Already has - sign
             }
 
             // Block number and confirmation display
@@ -2592,8 +2642,11 @@ static int printWalletMenu(int rows, int cols)
             } else {
                 blockStr = "pending";
                 confStr = strprintf("0/%d", requiredConf);
-                confColor = "\e[1;33m";  // Yellow
+                confColor = dimColor;  // Dim for unconfirmed
             }
+
+            // Type and txid color
+            std::string textColor = unconfirmed ? dimColor : "\e[0;37m";
 
             // Type with consistent width
             std::string typeStr = tx.type;
@@ -2601,23 +2654,23 @@ static int printWalletMenu(int rows, int cols)
 
             if (isExpanded) {
                 // Expanded: show full txid on one line, details on second line
-                drawCentered(strprintf("\e[0;37m%s\e[0m", fullTxid.c_str()));
+                drawCentered(strprintf("%s%s\e[0m", textColor.c_str(), fullTxid.c_str()));
                 lines++;
-                std::string detailLine = strprintf("  %s%s\e[0m %s %s %s%s\e[0m",
+                std::string detailLine = strprintf("  %s%s\e[0m %s%s\e[0m %s%s\e[0m %s%s\e[0m",
                     amountColor.c_str(), amountStr.c_str(),
-                    typeStr.c_str(),
-                    blockStr.c_str(),
+                    textColor.c_str(), typeStr.c_str(),
+                    textColor.c_str(), blockStr.c_str(),
                     confColor.c_str(), confStr.c_str());
                 drawCentered(detailLine);
                 lines++;
             } else {
                 // Compact: txid...txid amount type block conf on one line
                 std::string txidStr = fullTxid.substr(0, 6) + "..." + fullTxid.substr(fullTxid.length() - 6);
-                std::string txLine = strprintf("\e[0;37m%s\e[0m %s%s\e[0m %s %s %s%s\e[0m",
-                    txidStr.c_str(),
+                std::string txLine = strprintf("%s%s\e[0m %s%s\e[0m %s%s\e[0m %s%s\e[0m %s%s\e[0m",
+                    textColor.c_str(), txidStr.c_str(),
                     amountColor.c_str(), amountStr.c_str(),
-                    typeStr.c_str(),
-                    blockStr.c_str(),
+                    textColor.c_str(), typeStr.c_str(),
+                    textColor.c_str(), blockStr.c_str(),
                     confColor.c_str(), confStr.c_str());
                 drawCentered(txLine);
                 lines++;
@@ -2635,19 +2688,32 @@ static int printWalletMenu(int rows, int cols)
     lines++;
 
     // Build control line
-    std::string sendLabel = hasPendingSend.load() ? "\e[1;33mPROCESSING\e[0m" : "Send";
-    std::string shieldLabel;
-    if (hasPendingShield.load()) {
-        shieldLabel = "\e[1;33mPROCESSING\e[0m";
-    } else if (hasShieldableCoins.load()) {
-        shieldLabel = "Shield";
+    std::string sendKey, sendLabel;
+    std::string shieldKey, shieldLabel;
+
+    if (syncing) {
+        sendKey = "\e[1;30m[S]\e[0m";
+        sendLabel = "\e[1;30mSend\e[0m";
+        shieldKey = "\e[1;30m[Z]\e[0m";
+        shieldLabel = "\e[1;30mShield\e[0m";
     } else {
-        shieldLabel = "\e[1;30mShield\e[0m";  // Gray out when no coins
+        sendKey = "\e[1;37m[S]\e[0m";
+        sendLabel = hasPendingSend.load() ? "\e[1;33mPROCESSING\e[0m" : "Send";
+        if (hasPendingShield.load()) {
+            shieldKey = "\e[1;37m[Z]\e[0m";
+            shieldLabel = "\e[1;33mPROCESSING\e[0m";
+        } else if (hasShieldableCoins.load()) {
+            shieldKey = "\e[1;37m[Z]\e[0m";
+            shieldLabel = "Shield";
+        } else {
+            shieldKey = "\e[1;30m[Z]\e[0m";
+            shieldLabel = "\e[1;30mShield\e[0m";
+        }
     }
 
     std::string expandLabel = expandTxids.load() ? "Collapse" : "Expand";
-    std::string controls = strprintf("\e[1;37m[S]\e[0m %s   \e[1;37m[Z]\e[0m %s   \e[1;37m[E]\e[0m %s   \e[1;37m[ESC]\e[0m Back",
-        sendLabel.c_str(), shieldLabel.c_str(), expandLabel.c_str());
+    std::string controls = strprintf("%s %s   %s %s   \e[1;37m[E]\e[0m %s   \e[1;37m[ESC]\e[0m Back",
+        sendKey.c_str(), sendLabel.c_str(), shieldKey.c_str(), shieldLabel.c_str(), expandLabel.c_str());
     drawCentered(controls);
     lines++;
 
@@ -4260,14 +4326,26 @@ void ThreadShowMetricsScreen()
                         break;
                     } else if (key == 'S' || key == 's') {
                         // Send transaction
-                        if (!hasPendingSend.load()) {
+                        if (isWalletSyncing()) {
+                            lastErrorMessage = "Unavailable during sync";
+                            lastErrorTime = GetTime();
+                            forceFullClear = true;
+                            break;
+                        } else if (!hasPendingSend.load()) {
+                            std::cout << "\r\e[K\e[1;33mPlease wait...\e[0m" << std::flush;
                             promptSendTransaction(rows);
                             forceFullClear = true;
                             break;
                         }
                     } else if (key == 'Z' || key == 'z') {
                         // Shield mined coins
-                        if (hasShieldableCoins.load() && !hasPendingShield.load()) {
+                        if (isWalletSyncing()) {
+                            lastErrorMessage = "Unavailable during sync";
+                            lastErrorTime = GetTime();
+                            forceFullClear = true;
+                            break;
+                        } else if (hasShieldableCoins.load() && !hasPendingShield.load()) {
+                            std::cout << "\r\e[K\e[1;33mPlease wait...\e[0m" << std::flush;
                             shieldCoinbase(rows);
                             forceFullClear = true;
                             break;
