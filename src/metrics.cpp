@@ -2736,7 +2736,7 @@ int printInitMessage()
     }
 
     std::string msg = *initMessage;
-    std::cout << _("Node is starting up:") << " " << msg << std::endl;
+    std::cout << _("Node is starting up:") << " " << msg << "\e[K" << std::endl;
     std::cout << std::endl;
 
     if (msg == _("Done loading")) {
