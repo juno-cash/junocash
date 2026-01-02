@@ -1699,6 +1699,16 @@ static void checkPendingShield()
                 hasPendingShield.store(false);
                 pendingShieldOpId = "";
                 pendingShieldTxId.SetNull();
+                forceFullClear = true;
+            } else if (depth == -1) {
+                // Transaction orphaned (not in chain and not in mempool) - clear pending state
+                hasPendingShield.store(false);
+                pendingShieldOpId = "";
+                pendingShieldTxId.SetNull();
+                shieldingInProgress.store(false);
+                lastErrorMessage = "Shield transaction was orphaned or dropped from mempool";
+                lastErrorTime = GetTime();
+                forceFullClear = true;
             }
         }
     }
@@ -1750,6 +1760,16 @@ static void checkPendingSend()
                 hasPendingSend.store(false);
                 pendingSendOpId = "";
                 pendingSendTxId.SetNull();
+                forceFullClear = true;
+            } else if (depth == -1) {
+                // Transaction orphaned (not in chain and not in mempool) - clear pending state
+                hasPendingSend.store(false);
+                pendingSendOpId = "";
+                pendingSendTxId.SetNull();
+                sendInProgress.store(false);
+                lastErrorMessage = "Send transaction was orphaned or dropped from mempool";
+                lastErrorTime = GetTime();
+                forceFullClear = true;
             }
         }
     }
@@ -2250,6 +2270,12 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count)
         info.txid = entry.first;
         info.confirmations = wtx.GetDepthInMainChain(std::nullopt);
         info.timestamp = wtx.GetTxTime();
+
+        // Skip orphaned transactions (not in chain and not in mempool)
+        // These will never confirm and should not be displayed
+        if (info.confirmations == -1) {
+            continue;
+        }
 
         // Calculate transparent amounts
         CAmount tDebit = wtx.GetDebit(ISMINE_ALL);
