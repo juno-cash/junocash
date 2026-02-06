@@ -137,6 +137,13 @@ struct TxDisplayInfo {
     int64_t timestamp;
 };
 
+// Aggregate shielded balance across all accounts
+struct ShieldedBalances {
+    CAmount spendable = 0;     // minconf >= 10
+    CAmount confirming = 0;    // minconf 1-9
+    CAmount unconfirmed = 0;   // minconf 0
+};
+
 // Forward declarations
 static void checkPendingShield();
 static void checkPendingSend();
@@ -144,6 +151,11 @@ static std::vector<TxDisplayInfo> getRecentTransactions(int count);
 static int printWalletMenu(int rows, int cols);
 static void promptSendTransaction(int rows);
 static std::vector<std::string> getShieldedAddresses();
+static std::vector<std::string> getShieldedAddressesForAccount(libzcash::AccountId accountId);
+static std::vector<libzcash::AccountId> getAccountIds();
+static ShieldedBalances sumShieldedBalances(const ZTXOSelector& selector);
+static ShieldedBalances getAggregateShieldedBalances();
+static std::optional<libzcash::AccountId> promptAccountSelection(int rows, const std::string& purpose);
 #ifndef WIN32
 static void enableRawMode();
 static void enableCanonicalMode();
@@ -1284,44 +1296,12 @@ int printWalletStatus()
         hasShieldableCoins.store(displayMature > 0);
         hasLockedCoins.store(lockedCoinbaseValue > 0);
 
-        // Get shielded balances from account 0
+        // Get shielded balances aggregated across all accounts
         // Orchard notes require 10 confirmations to be spendable
-        CAmount shieldedSpendable = 0;    // minconf >= 10 (actually spendable)
-        CAmount shieldedConfirming = 0;   // minconf 1-9 (confirmed but not yet spendable)
-        CAmount shieldedUnconfirmed = 0;  // minconf 0 (pending in mempool)
-
-        {
-            LOCK2(cs_main, pwalletMain->cs_wallet);
-
-            auto selector = pwalletMain->ZTXOSelectorForAccount(0, false, TransparentCoinbasePolicy::Allow);
-            if (selector.has_value()) {
-                // Helper to sum shielded inputs
-                auto sumShieldedInputs = [](const SpendableInputs& inputs) {
-                    CAmount total = 0;
-                    for (const auto& t : inputs.saplingNoteEntries) {
-                        total += t.note.value();
-                    }
-                    for (const auto& t : inputs.orchardNoteMetadata) {
-                        total += t.GetNoteValue();
-                    }
-                    return total;
-                };
-
-                // Get spendable balance (minconf=10)
-                auto spendableInputs = pwalletMain->FindSpendableInputs(selector.value(), 10, std::nullopt);
-                shieldedSpendable = sumShieldedInputs(spendableInputs);
-
-                // Get confirmed balance (minconf=1) to calculate confirming
-                auto confirmedInputs = pwalletMain->FindSpendableInputs(selector.value(), 1, std::nullopt);
-                CAmount totalConfirmed = sumShieldedInputs(confirmedInputs);
-                shieldedConfirming = totalConfirmed - shieldedSpendable;
-
-                // Get total balance (minconf=0) to calculate unconfirmed
-                auto allInputs = pwalletMain->FindSpendableInputs(selector.value(), 0, std::nullopt);
-                CAmount totalAll = sumShieldedInputs(allInputs);
-                shieldedUnconfirmed = totalAll - totalConfirmed;
-            }
-        }
+        auto shieldedBal = getAggregateShieldedBalances();
+        CAmount shieldedSpendable = shieldedBal.spendable;
+        CAmount shieldedConfirming = shieldedBal.confirming;
+        CAmount shieldedUnconfirmed = shieldedBal.unconfirmed;
 
         std::string units = Params().CurrencyUnits();
 
@@ -1789,8 +1769,45 @@ static void shieldCoinbase(int rows)
         return;
     }
 
-    // Get the default j1 address
-    auto addresses = getShieldedAddresses();
+    // Select destination account (prompt if multiple exist)
+    libzcash::AccountId selectedAccount = 0;
+    {
+        LOCK(pwalletMain->cs_wallet);
+        auto accounts = getAccountIds();
+        if (accounts.empty()) {
+            std::cout << "\r\e[K\e[1;31mError: No accounts available\e[0m" << std::flush;
+            MilliSleep(2000);
+            return;
+        }
+        if (accounts.size() == 1) {
+            selectedAccount = accounts[0];
+        } else {
+#ifndef WIN32
+            enableCanonicalMode();
+#endif
+            auto choice = promptAccountSelection(rows, "shielding destination");
+            if (!choice.has_value()) {
+                std::cout << "\r\e[K\e[1;33mShield cancelled\e[0m" << std::flush;
+                MilliSleep(1000);
+#ifndef WIN32
+                enableRawMode();
+#endif
+                forceFullClear = true;
+                return;
+            }
+            selectedAccount = choice.value();
+#ifndef WIN32
+            enableRawMode();
+#endif
+        }
+    }
+
+    // Get the j1 address for the selected account
+    std::vector<std::string> addresses;
+    {
+        LOCK(pwalletMain->cs_wallet);
+        addresses = getShieldedAddressesForAccount(selectedAccount);
+    }
     if (addresses.empty()) {
         std::cout << "\r\e[K\e[1;31mError: No shielded address available\e[0m" << std::flush;
         MilliSleep(2000);
@@ -1881,11 +1898,44 @@ static void promptSendTransaction(int rows)
     KeyIO keyIO(Params());
     std::string units = Params().CurrencyUnits();
 
-    // Get spendable shielded balance
+    // Select account (prompt if multiple exist)
+    libzcash::AccountId selectedAccount = 0;
+    {
+        LOCK(pwalletMain->cs_wallet);
+        auto accounts = getAccountIds();
+        if (accounts.empty()) {
+            std::cout << "\e[" << inputRow << ";1H\e[K";
+            std::cout << "\e[1;31mNo accounts available\e[0m" << std::flush;
+            MilliSleep(2000);
+            std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+            enableRawMode();
+#endif
+            return;
+        }
+        if (accounts.size() == 1) {
+            selectedAccount = accounts[0];
+        } else {
+            auto choice = promptAccountSelection(rows, "sending");
+            if (!choice.has_value()) {
+                std::cout << "\e[" << inputRow << ";1H\e[K";
+                std::cout << "\e[1;33mSend cancelled\e[0m" << std::flush;
+                MilliSleep(1000);
+                std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
+#ifndef WIN32
+                enableRawMode();
+#endif
+                return;
+            }
+            selectedAccount = choice.value();
+        }
+    }
+
+    // Get spendable shielded balance for selected account
     CAmount spendableBalance = 0;
     {
         LOCK2(cs_main, pwalletMain->cs_wallet);
-        auto selector = pwalletMain->ZTXOSelectorForAccount(0, false, TransparentCoinbasePolicy::Allow);
+        auto selector = pwalletMain->ZTXOSelectorForAccount(selectedAccount, false, TransparentCoinbasePolicy::Allow);
         if (selector.has_value()) {
             auto inputs = pwalletMain->FindSpendableInputs(selector.value(), 10, std::nullopt);
             for (const auto& t : inputs.orchardNoteMetadata) {
@@ -2067,8 +2117,12 @@ static void promptSendTransaction(int rows)
     std::cout << "\e[" << inputRow << ";1H\e[K";
     std::cout << "\e[1;33mSending...\e[0m" << std::flush;
 
-    // Get source address (first unified address)
-    auto sourceAddresses = getShieldedAddresses();
+    // Get source address (first unified address for selected account)
+    std::vector<std::string> sourceAddresses;
+    {
+        LOCK(pwalletMain->cs_wallet);
+        sourceAddresses = getShieldedAddressesForAccount(selectedAccount);
+    }
     if (sourceAddresses.empty()) {
         std::cout << "\e[" << inputRow << ";1H\e[K";
         std::cout << "\e[1;31mError: No source address available\e[0m" << std::flush;
@@ -2148,20 +2202,19 @@ static void promptSendTransaction(int rows)
     forceFullClear = true;
 }
 
-// Get first 3 unified addresses for account 0 (indices 0, 1, 2)
-static std::vector<std::string> getShieldedAddresses()
+// Get first 3 unified addresses for a specific account. Requires cs_wallet held by caller.
+static std::vector<std::string> getShieldedAddressesForAccount(libzcash::AccountId accountId)
 {
     std::vector<std::string> addresses;
     if (!pwalletMain) return addresses;
 
-    LOCK(pwalletMain->cs_wallet);
     KeyIO keyIO(Params());
 
-    // Find the account 0 UFVK
+    // Find the UFVK for the requested account
     libzcash::UFVKId ufvkId;
     bool foundAccount = false;
     for (const auto& [acctKey, id] : pwalletMain->mapUnifiedAccountKeys) {
-        if (acctKey.second == libzcash::AccountId(0)) {
+        if (acctKey.second == accountId) {
             ufvkId = id;
             foundAccount = true;
             break;
@@ -2198,6 +2251,145 @@ static std::vector<std::string> getShieldedAddresses()
     }
 
     return addresses;
+}
+
+// Get first 3 unified addresses for account 0 (wrapper for backward compat)
+static std::vector<std::string> getShieldedAddresses()
+{
+    if (!pwalletMain) return {};
+    LOCK(pwalletMain->cs_wallet);
+    return getShieldedAddressesForAccount(libzcash::AccountId(0));
+}
+
+// Get sorted list of all account IDs. Requires cs_wallet held by caller.
+static std::vector<libzcash::AccountId> getAccountIds()
+{
+    std::vector<libzcash::AccountId> accounts;
+    if (!pwalletMain) return accounts;
+
+    std::set<libzcash::AccountId> seen;
+    for (const auto& [acctKey, id] : pwalletMain->mapUnifiedAccountKeys) {
+        if (acctKey.second != libzcash::ZCASH_LEGACY_ACCOUNT) {
+            seen.insert(acctKey.second);
+        }
+    }
+    accounts.assign(seen.begin(), seen.end());
+    return accounts;
+}
+
+// Sum shielded balances for a given selector. Requires LOCK2(cs_main, cs_wallet) held by caller.
+static ShieldedBalances sumShieldedBalances(const ZTXOSelector& selector)
+{
+    ShieldedBalances bal;
+
+    auto sumInputs = [](const SpendableInputs& inputs) {
+        CAmount total = 0;
+        for (const auto& t : inputs.saplingNoteEntries) {
+            total += t.note.value();
+        }
+        for (const auto& t : inputs.orchardNoteMetadata) {
+            total += t.GetNoteValue();
+        }
+        return total;
+    };
+
+    auto spendableInputs = pwalletMain->FindSpendableInputs(selector, 10, std::nullopt);
+    bal.spendable = sumInputs(spendableInputs);
+
+    auto confirmedInputs = pwalletMain->FindSpendableInputs(selector, 1, std::nullopt);
+    CAmount totalConfirmed = sumInputs(confirmedInputs);
+    bal.confirming = totalConfirmed - bal.spendable;
+
+    auto allInputs = pwalletMain->FindSpendableInputs(selector, 0, std::nullopt);
+    CAmount totalAll = sumInputs(allInputs);
+    bal.unconfirmed = totalAll - totalConfirmed;
+
+    return bal;
+}
+
+// Aggregate shielded balances across all accounts
+static ShieldedBalances getAggregateShieldedBalances()
+{
+    ShieldedBalances total;
+    if (!pwalletMain) return total;
+
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+
+    auto accounts = getAccountIds();
+    for (auto accountId : accounts) {
+        auto selector = pwalletMain->ZTXOSelectorForAccount(accountId, false, TransparentCoinbasePolicy::Allow);
+        if (selector.has_value()) {
+            auto bal = sumShieldedBalances(selector.value());
+            total.spendable += bal.spendable;
+            total.confirming += bal.confirming;
+            total.unconfirmed += bal.unconfirmed;
+        }
+    }
+
+    return total;
+}
+
+// Prompt user to select an account when multiple accounts exist.
+// Returns selected AccountId or nullopt if cancelled.
+// Caller must handle canonical/raw mode switching around this call.
+static std::optional<libzcash::AccountId> promptAccountSelection(int rows, const std::string& purpose)
+{
+    if (!pwalletMain) return std::nullopt;
+
+    std::vector<libzcash::AccountId> accounts;
+    std::vector<ShieldedBalances> balances;
+    {
+        LOCK2(cs_main, pwalletMain->cs_wallet);
+        accounts = getAccountIds();
+        if (accounts.size() <= 1) {
+            return accounts.empty() ? std::nullopt : std::optional<libzcash::AccountId>(accounts[0]);
+        }
+        for (auto accountId : accounts) {
+            auto selector = pwalletMain->ZTXOSelectorForAccount(accountId, false, TransparentCoinbasePolicy::Allow);
+            if (selector.has_value()) {
+                balances.push_back(sumShieldedBalances(selector.value()));
+            } else {
+                balances.push_back(ShieldedBalances{});
+            }
+        }
+    }
+
+    std::string units = Params().CurrencyUnits();
+    int inputRow = rows - 2;
+
+    std::cout << "\e[" << inputRow << ";1H\e[K";
+    std::cout << "\e[1;33mSelect account for " << purpose << ":\e[0m" << std::endl;
+    for (size_t i = 0; i < accounts.size(); i++) {
+        std::cout << "\e[K  [" << (i + 1) << "] Account " << accounts[i]
+                  << " (" << FormatMoney(balances[i].spendable) << " " << units << " spendable)" << std::endl;
+    }
+    std::cout << "\e[K  [0] Cancel" << std::endl;
+    std::cout << "\e[KChoice: " << std::flush;
+
+    std::string choiceStr;
+    std::getline(std::cin, choiceStr);
+
+    // Clear prompt lines
+    for (size_t i = 0; i < accounts.size() + 4; i++) {
+        std::cout << "\e[" << (inputRow + i) << ";1H\e[K";
+    }
+
+    if (choiceStr.empty() || choiceStr == "0") {
+        return std::nullopt;
+    }
+
+    int choice = 0;
+    try {
+        choice = std::stoi(choiceStr);
+    } catch (...) {
+        return std::nullopt;
+    }
+
+    if (choice < 1 || choice > (int)accounts.size()) {
+        return std::nullopt;
+    }
+
+    return accounts[choice - 1];
 }
 
 // Get recent transactions for wallet menu display
@@ -2482,37 +2674,17 @@ static int printWalletMenu(int rows, int cols)
         hasShieldableCoins.store(displayMature > 0);
         hasLockedCoins.store(lockedCoinbaseValue > 0);
 
-        // Get shielded balances (same as printWalletStatus)
-        CAmount shieldedSpendable = 0;
-        CAmount shieldedConfirming = 0;
-        CAmount shieldedUnconfirmed = 0;
+        // Get shielded balances aggregated across all accounts
+        auto shieldedBal = getAggregateShieldedBalances();
+        CAmount shieldedSpendable = shieldedBal.spendable;
+        CAmount shieldedConfirming = shieldedBal.confirming;
+        CAmount shieldedUnconfirmed = shieldedBal.unconfirmed;
 
+        // Check if multiple accounts exist
+        size_t numAccounts = 0;
         {
-            LOCK2(cs_main, pwalletMain->cs_wallet);
-            auto selector = pwalletMain->ZTXOSelectorForAccount(0, false, TransparentCoinbasePolicy::Allow);
-            if (selector.has_value()) {
-                auto sumShieldedInputs = [](const SpendableInputs& inputs) {
-                    CAmount total = 0;
-                    for (const auto& t : inputs.saplingNoteEntries) {
-                        total += t.note.value();
-                    }
-                    for (const auto& t : inputs.orchardNoteMetadata) {
-                        total += t.GetNoteValue();
-                    }
-                    return total;
-                };
-
-                auto spendableInputs = pwalletMain->FindSpendableInputs(selector.value(), 10, std::nullopt);
-                shieldedSpendable = sumShieldedInputs(spendableInputs);
-
-                auto confirmedInputs = pwalletMain->FindSpendableInputs(selector.value(), 1, std::nullopt);
-                CAmount totalConfirmed = sumShieldedInputs(confirmedInputs);
-                shieldedConfirming = totalConfirmed - shieldedSpendable;
-
-                auto allInputs = pwalletMain->FindSpendableInputs(selector.value(), 0, std::nullopt);
-                CAmount totalAll = sumShieldedInputs(allInputs);
-                shieldedUnconfirmed = totalAll - totalConfirmed;
-            }
+            LOCK(pwalletMain->cs_wallet);
+            numAccounts = getAccountIds().size();
         }
 
         std::string units = Params().CurrencyUnits();
@@ -2535,13 +2707,14 @@ static int printWalletMenu(int rows, int cols)
             lines++;
         }
 
-        // Show receiving address
+        // Show receiving address (account 0), labeled if multiple accounts
         auto addresses = getShieldedAddresses();
         if (!addresses.empty()) {
             std::string j1Addr = addresses[0];
+            std::string addrLabel = (numAccounts > 1) ? "Receive Addr (Acct 0)" : "Receive Address";
             bool isExpanded = expandTxids.load();
             if (isExpanded) {
-                std::cout << BOX_VERTICAL << " \e[1;36mReceive Address:\e[0m \e[1;33m" << j1Addr << "\e[0m\e[K" << std::endl;
+                std::cout << BOX_VERTICAL << " \e[1;36m" << addrLabel << ":\e[0m \e[1;33m" << j1Addr << "\e[0m\e[K" << std::endl;
                 lines++;
             } else {
                 std::string displayAddr;
@@ -2550,7 +2723,7 @@ static int printWalletMenu(int rows, int cols)
                 } else {
                     displayAddr = j1Addr;
                 }
-                drawRow("Receive Address", displayAddr);
+                drawRow(addrLabel, displayAddr);
                 lines++;
             }
         }
