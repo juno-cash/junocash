@@ -119,7 +119,7 @@ TEST(MempoolLimitTests, MempoolCostAndEvictionWeight)
     auto fvk = extfvk.fvk;
     auto pa = extfvk.DefaultAddress();
 
-    CAmount funds = 66000;
+    CAmount funds = 2000000;
     auto testNote = GetTestSaplingNote(pa, funds);
 
     // Default fee
@@ -138,7 +138,7 @@ TEST(MempoolLimitTests, MempoolCostAndEvictionWeight)
         auto builder = TransactionBuilder(Params(), 1, std::nullopt, testNote.tree.root());
         builder.AddSaplingSpend(sk, testNote.note, testNote.tree.witness());
         builder.AddSaplingOutput(fvk.ovk, pa, 25000, {});
-        static_assert(MINIMUM_FEE == 10000);
+        static_assert(MINIMUM_FEE == 200000);
         builder.SetFee(MINIMUM_FEE-1);
 
         auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(builder.Build().GetTxOrThrow(), MINIMUM_FEE-1);

@@ -13,7 +13,7 @@
 #include <vector>
 
 // Constants for fee calculation.
-static const CAmount MARGINAL_FEE = 5000;
+static const CAmount MARGINAL_FEE = 100000;
 static const CAmount SHIELDING_MARGINAL_FEE = 5000;
 static const CAmount WALLET_MARGINAL_FEE = 100000;
 static const size_t GRACE_ACTIONS = 2;

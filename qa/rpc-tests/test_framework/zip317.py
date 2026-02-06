@@ -13,7 +13,7 @@ from test_framework.mininode import COIN
 from decimal import Decimal
 
 # The fee per logical action, in zatoshis. See https://zips.z.cash/zip-0317#fee-calculation.
-MARGINAL_FEE = 5000
+MARGINAL_FEE = 100000
 
 # The lower bound on the number of logical actions in a tx, for purposes of fee calculation. See
 # https://zips.z.cash/zip-0317#fee-calculation.
