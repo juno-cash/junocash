@@ -35,6 +35,9 @@ static const CAmount MINIMUM_FEE = MARGINAL_FEE * GRACE_ACTIONS;
 /// <https://zips.z.cash/zip-0317#fee-calculation>.
 CAmount CalculateConventionalFee(size_t logicalActionCount);
 
+/// Return the conventional fee using the shielding marginal fee when spendsCoinbase is true.
+CAmount CalculateConventionalFee(size_t logicalActionCount, bool spendsCoinbase);
+
 /// Return the number of logical actions calculated according to
 /// <https://zips.z.cash/zip-0317#fee-calculation>.
 size_t CalculateLogicalActionCount(

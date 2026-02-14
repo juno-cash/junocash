@@ -65,7 +65,8 @@ public:
 // conventional fee, otherwise 0.
 
 // Calculate cost and eviction weight based on the memory usage and fee.
-std::pair<int64_t, int64_t> MempoolCostAndEvictionWeight(const CTransaction& tx, const CAmount& fee);
+// When spendsCoinbase is true, the shielding marginal fee is used for the conventional fee check.
+std::pair<int64_t, int64_t> MempoolCostAndEvictionWeight(const CTransaction& tx, const CAmount& fee, bool spendsCoinbase);
 
 
 class MempoolLimitTxSet

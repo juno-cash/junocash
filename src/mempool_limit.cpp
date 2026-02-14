@@ -9,6 +9,7 @@
 #include "timedata.h"
 #include "util/time.h"
 #include "version.h"
+#include "zip317.h"
 
 void RecentlyEvictedList::pruneList()
 {
@@ -39,12 +40,12 @@ bool RecentlyEvictedList::contains(const uint256& txId)
     return txIdSet.count(txId) > 0;
 }
 
-std::pair<int64_t, int64_t> MempoolCostAndEvictionWeight(const CTransaction& tx, const CAmount& fee)
+std::pair<int64_t, int64_t> MempoolCostAndEvictionWeight(const CTransaction& tx, const CAmount& fee, bool spendsCoinbase)
 {
     size_t memUsage = RecursiveDynamicUsage(tx);
     int64_t cost = std::max((int64_t) memUsage, (int64_t) MIN_TX_COST);
     int64_t evictionWeight = cost;
-    if (fee < tx.GetConventionalFee()) {
+    if (fee < CalculateConventionalFee(tx.GetLogicalActionCount(), spendsCoinbase)) {
         evictionWeight += LOW_FEE_PENALTY;
     }
     return std::make_pair(cost, evictionWeight);
