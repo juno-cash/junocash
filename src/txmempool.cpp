@@ -318,8 +318,9 @@ int128_t CTxMemPoolEntry::GetWeightRatio() const
 {
     // ensure that the result will always be nonzero
     static_assert(WEIGHT_RATIO_SCALE > MAX_MONEY);
+    CAmount conventionalFee = CalculateConventionalFee(tx->GetLogicalActionCount(), spendsCoinbase);
     return std::min(
-        (int128_t {WEIGHT_RATIO_SCALE} * std::max(CAmount {1}, GetModifiedFee())) / tx->GetConventionalFee(),
+        (int128_t {WEIGHT_RATIO_SCALE} * std::max(CAmount {1}, GetModifiedFee())) / conventionalFee,
         int128_t {WEIGHT_RATIO_SCALE} * WEIGHT_RATIO_CAP);
 }
 
@@ -384,7 +385,7 @@ bool CTxMemPool::addUnchecked(const uint256& hash, const CTxMemPoolEntry &entry,
     // Used by main.cpp AcceptToMemoryPool(), which DOES do
     // all the appropriate checks.
     LOCK(cs);
-    auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(entry.GetTx(), entry.GetFee());
+    auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(entry.GetTx(), entry.GetFee(), entry.GetSpendsCoinbase());
     limitSet->add(entry.GetTx().GetHash(), cost, evictionWeight);
     indexed_transaction_set::iterator newit = mapTx.insert(entry).first;
     mapLinks.insert(make_pair(newit, TxLinks()));

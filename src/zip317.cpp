@@ -14,6 +14,11 @@ CAmount CalculateConventionalFee(size_t logicalActionCount) {
     return MARGINAL_FEE * std::max(GRACE_ACTIONS, logicalActionCount);
 }
 
+CAmount CalculateConventionalFee(size_t logicalActionCount, bool spendsCoinbase) {
+    CAmount marginalFee = spendsCoinbase ? SHIELDING_MARGINAL_FEE : MARGINAL_FEE;
+    return marginalFee * std::max(GRACE_ACTIONS, logicalActionCount);
+}
+
 template<typename T>
 static size_t GetTxIOFieldSize(const std::vector<T>& txIOs) {
     auto size = GetSerializeSize(txIOs, SER_NETWORK, PROTOCOL_VERSION);

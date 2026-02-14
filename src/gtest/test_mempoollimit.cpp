@@ -128,7 +128,7 @@ TEST(MempoolLimitTests, MempoolCostAndEvictionWeight)
         builder.AddSaplingSpend(sk, testNote.note, testNote.tree.witness());
         builder.AddSaplingOutput(fvk.ovk, pa, 25000, {});
 
-        auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(builder.Build().GetTxOrThrow(), MINIMUM_FEE);
+        auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(builder.Build().GetTxOrThrow(), MINIMUM_FEE, false);
         EXPECT_EQ(MIN_TX_COST, cost);
         EXPECT_EQ(MIN_TX_COST, evictionWeight);
     }
@@ -141,7 +141,7 @@ TEST(MempoolLimitTests, MempoolCostAndEvictionWeight)
         static_assert(MINIMUM_FEE == 200000);
         builder.SetFee(MINIMUM_FEE-1);
 
-        auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(builder.Build().GetTxOrThrow(), MINIMUM_FEE-1);
+        auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(builder.Build().GetTxOrThrow(), MINIMUM_FEE-1, false);
         EXPECT_EQ(MIN_TX_COST, cost);
         EXPECT_EQ(MIN_TX_COST + LOW_FEE_PENALTY, evictionWeight);
     }
@@ -170,14 +170,27 @@ TEST(MempoolLimitTests, MempoolCostAndEvictionWeight)
         size_t tx_usage = RecursiveDynamicUsage(tx);
         EXPECT_GT(tx_usage, MIN_TX_COST);
 
-        auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(tx, zip317_fee);
+        auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(tx, zip317_fee, false);
         EXPECT_EQ(tx_usage, cost);
         EXPECT_EQ(tx_usage, evictionWeight);
 
         // If we pay less than the conventional fee for 11 actions, we should incur a low fee penalty.
-        auto [cost2, evictionWeight2] = MempoolCostAndEvictionWeight(tx, zip317_fee-1);
+        auto [cost2, evictionWeight2] = MempoolCostAndEvictionWeight(tx, zip317_fee-1, false);
         EXPECT_EQ(tx_usage, cost2);
         EXPECT_EQ(tx_usage + LOW_FEE_PENALTY, evictionWeight2);
+
+        // Shielding (spendsCoinbase=true): paying the shielding conventional fee should not
+        // incur a low fee penalty, even though it is below the standard conventional fee.
+        CAmount shielding_fee = CalculateConventionalFee(11, true);
+        ASSERT_LT(shielding_fee, zip317_fee);
+        auto [cost3, evictionWeight3] = MempoolCostAndEvictionWeight(tx, shielding_fee, true);
+        EXPECT_EQ(tx_usage, cost3);
+        EXPECT_EQ(tx_usage, evictionWeight3);
+
+        // Shielding: paying less than shielding conventional fee should still incur penalty.
+        auto [cost4, evictionWeight4] = MempoolCostAndEvictionWeight(tx, shielding_fee-1, true);
+        EXPECT_EQ(tx_usage, cost4);
+        EXPECT_EQ(tx_usage + LOW_FEE_PENALTY, evictionWeight4);
     }
 
     RegtestDeactivateSapling();
