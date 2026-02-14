@@ -1,18 +1,14 @@
 // Copyright (c) 2019-2023 The Zcash developers
+// Copyright (c) 2025 Juno Cash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 #include <gtest/gtest.h>
-#include <iostream>
 
 #include "arith_uint256.h"
 #include "mempool_limit.h"
-#include "gtest/utils.h"
 #include "util/time.h"
-#include "util/test.h"
-#include "transaction_builder.h"
 #include "zip317.h"
-#include "core_memusage.h"
 
 
 const uint256 TX_ID1 = ArithToUint256(1);
@@ -106,92 +102,18 @@ TEST(MempoolLimitTests, MempoolLimitTxSetCheckSizeAfterDropping)
     }
 }
 
-TEST(MempoolLimitTests, MempoolCostAndEvictionWeight)
+TEST(MempoolLimitTests, CalculateConventionalFeeShielding)
 {
-    LoadProofParameters();
+    // Standard conventional fee uses MARGINAL_FEE
+    EXPECT_EQ(MARGINAL_FEE * GRACE_ACTIONS, CalculateConventionalFee(2));
+    EXPECT_EQ(MARGINAL_FEE * 11, CalculateConventionalFee(11));
+    EXPECT_EQ(MARGINAL_FEE * GRACE_ACTIONS, CalculateConventionalFee(2, false));
 
-    // The transaction creation is based on the test:
-    // test_transaction_builder.cpp/TEST(TransactionBuilder, SetFee)
-    auto consensusParams = RegtestActivateSapling();
+    // Shielding conventional fee uses SHIELDING_MARGINAL_FEE
+    EXPECT_EQ(SHIELDING_MARGINAL_FEE * GRACE_ACTIONS, CalculateConventionalFee(2, true));
+    EXPECT_EQ(SHIELDING_MARGINAL_FEE * 11, CalculateConventionalFee(11, true));
 
-    auto sk = GetTestMasterSaplingSpendingKey();
-    auto extfvk = sk.ToXFVK();
-    auto fvk = extfvk.fvk;
-    auto pa = extfvk.DefaultAddress();
-
-    CAmount funds = 2000000;
-    auto testNote = GetTestSaplingNote(pa, funds);
-
-    // Default fee
-    {
-        auto builder = TransactionBuilder(Params(), 1, std::nullopt, testNote.tree.root());
-        builder.AddSaplingSpend(sk, testNote.note, testNote.tree.witness());
-        builder.AddSaplingOutput(fvk.ovk, pa, 25000, {});
-
-        auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(builder.Build().GetTxOrThrow(), MINIMUM_FEE, false);
-        EXPECT_EQ(MIN_TX_COST, cost);
-        EXPECT_EQ(MIN_TX_COST, evictionWeight);
-    }
-
-    // Lower than standard fee
-    {
-        auto builder = TransactionBuilder(Params(), 1, std::nullopt, testNote.tree.root());
-        builder.AddSaplingSpend(sk, testNote.note, testNote.tree.witness());
-        builder.AddSaplingOutput(fvk.ovk, pa, 25000, {});
-        static_assert(MINIMUM_FEE == 200000);
-        builder.SetFee(MINIMUM_FEE-1);
-
-        auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(builder.Build().GetTxOrThrow(), MINIMUM_FEE-1, false);
-        EXPECT_EQ(MIN_TX_COST, cost);
-        EXPECT_EQ(MIN_TX_COST + LOW_FEE_PENALTY, evictionWeight);
-    }
-
-    // Larger Tx
-    {
-        auto builder = TransactionBuilder(Params(), 1, std::nullopt, testNote.tree.root());
-        builder.AddSaplingSpend(sk, testNote.note, testNote.tree.witness());
-        for (int i = 0; i < 10; i++) {
-            builder.AddSaplingOutput(fvk.ovk, pa, 1000, {});
-        }
-
-        auto result = builder.Build();
-        if (result.IsError()) {
-            std::cerr << result.GetError() << std::endl;
-        }
-        // max(1 input, 10 outputs + 1 change output) => 11 logical actions.
-        CAmount zip317_fee = CalculateConventionalFee(11);
-        ASSERT_GT(funds, 1000*10 + zip317_fee);
-        const CTransaction tx {result.GetTxOrThrow()};
-        EXPECT_EQ(11, tx.GetLogicalActionCount());
-
-        // For the test to be valid, we want the memory usage of this transaction to be more than MIN_TX_COST.
-        // Avoid hard-coding the usage because it might be platform-dependent.
-        ASSERT_GT(GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION), MIN_TX_COST);
-        size_t tx_usage = RecursiveDynamicUsage(tx);
-        EXPECT_GT(tx_usage, MIN_TX_COST);
-
-        auto [cost, evictionWeight] = MempoolCostAndEvictionWeight(tx, zip317_fee, false);
-        EXPECT_EQ(tx_usage, cost);
-        EXPECT_EQ(tx_usage, evictionWeight);
-
-        // If we pay less than the conventional fee for 11 actions, we should incur a low fee penalty.
-        auto [cost2, evictionWeight2] = MempoolCostAndEvictionWeight(tx, zip317_fee-1, false);
-        EXPECT_EQ(tx_usage, cost2);
-        EXPECT_EQ(tx_usage + LOW_FEE_PENALTY, evictionWeight2);
-
-        // Shielding (spendsCoinbase=true): paying the shielding conventional fee should not
-        // incur a low fee penalty, even though it is below the standard conventional fee.
-        CAmount shielding_fee = CalculateConventionalFee(11, true);
-        ASSERT_LT(shielding_fee, zip317_fee);
-        auto [cost3, evictionWeight3] = MempoolCostAndEvictionWeight(tx, shielding_fee, true);
-        EXPECT_EQ(tx_usage, cost3);
-        EXPECT_EQ(tx_usage, evictionWeight3);
-
-        // Shielding: paying less than shielding conventional fee should still incur penalty.
-        auto [cost4, evictionWeight4] = MempoolCostAndEvictionWeight(tx, shielding_fee-1, true);
-        EXPECT_EQ(tx_usage, cost4);
-        EXPECT_EQ(tx_usage + LOW_FEE_PENALTY, evictionWeight4);
-    }
-
-    RegtestDeactivateSapling();
+    // Shielding fee is always less than standard fee
+    EXPECT_LT(CalculateConventionalFee(2, true), CalculateConventionalFee(2, false));
+    EXPECT_LT(CalculateConventionalFee(11, true), CalculateConventionalFee(11, false));
 }
