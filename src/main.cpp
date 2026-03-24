@@ -4881,13 +4881,16 @@ void SetChainPoolValues(
         }
     }
 
-    // These values can only be computed here for the genesis block.
-    // For all other blocks, we update them in ConnectBlock instead.
     if (pindex->pprev == nullptr) {
         pindex->nChainSupplyDelta = chainSupplyDelta;
         pindex->nTransparentValue = transparentValueDelta;
     } else {
-        pindex->nChainSupplyDelta = std::nullopt;
+        // Compute chain supply delta from subsidy + lockbox so it's available
+        // even if ConnectBlock hasn't run yet (e.g. crash before flush).
+        // ConnectBlock will overwrite with the exact same value.
+        // chainSupplyDelta = lockbox + coinbaseOut - fees = lockbox + subsidy
+        pindex->nChainSupplyDelta = chainparams.GetConsensus().GetBlockSubsidy(pindex->nHeight) + lockboxValue;
+        // transparentValueDelta still requires UTXO set, computed in ConnectBlock.
         pindex->nTransparentValue = std::nullopt;
     }
 
