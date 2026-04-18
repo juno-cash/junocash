@@ -5116,6 +5116,73 @@ static bool AccumulateChainPoolValues(CBlockIndex *pindex)
     return true;
 }
 
+// At the chain supply checkpoint height, either inject the known-good chain
+// supply and pool totals into the block index (if they are currently
+// nullopt, e.g. on first load after upgrade) or verify that the existing
+// values match the checkpoint. On mismatch, abort with a reindex hint: the
+// accumulated totals on disk are provably wrong.
+//
+// At all other heights, this is a no-op (returns true). The checkpoint is
+// the only place where nChainTotalSupply is anchored against on-disk
+// corruption of nChainSupplyDelta. Backport of Zcash commit 63a72b16f.
+static bool FallbackChainSupplyCheckpoint(CBlockIndex *pindex, const CChainParams& chainparams)
+{
+    if (pindex->nHeight != chainparams.ChainSupplyCheckpointHeight()) {
+        return true;
+    }
+
+    if (!chainparams.ChainSupplyCheckpointBlockHash().IsNull() &&
+        pindex->GetBlockHash() != chainparams.ChainSupplyCheckpointBlockHash()) {
+        return error("%s: checkpoint block hash mismatch at height %d: "
+            "expected %s, got %s",
+            __func__, pindex->nHeight,
+            chainparams.ChainSupplyCheckpointBlockHash().ToString(),
+            pindex->GetBlockHash().ToString());
+    }
+
+    // Sanity: the checkpoint pool values must sum to the total supply.
+    assert(chainparams.ChainSupplyCheckpointTransparentValue()
+         + chainparams.ChainSupplyCheckpointSproutValue()
+         + chainparams.ChainSupplyCheckpointSaplingValue()
+         + chainparams.ChainSupplyCheckpointOrchardValue()
+         + chainparams.ChainSupplyCheckpointLockboxValue()
+        == chainparams.ChainSupplyCheckpointTotalSupply());
+
+    auto applyCheckpoint = [&](const char* fieldName,
+                               std::optional<CAmount>& field,
+                               CAmount expected) -> bool {
+        if (!field.has_value()) {
+            field = expected;
+        } else if (field.value() != expected) {
+            return error("%s: %s mismatch at checkpoint height %d: "
+                "expected %d, got %d. This may indicate chain value corruption; "
+                "please restart with -reindex.",
+                __func__, fieldName, pindex->nHeight,
+                expected, field.value());
+        }
+        return true;
+    };
+
+    return applyCheckpoint("nChainTotalSupply",
+                           pindex->nChainTotalSupply,
+                           chainparams.ChainSupplyCheckpointTotalSupply())
+        && applyCheckpoint("nChainTransparentValue",
+                           pindex->nChainTransparentValue,
+                           chainparams.ChainSupplyCheckpointTransparentValue())
+        && applyCheckpoint("nChainSproutValue",
+                           pindex->nChainSproutValue,
+                           chainparams.ChainSupplyCheckpointSproutValue())
+        && applyCheckpoint("nChainSaplingValue",
+                           pindex->nChainSaplingValue,
+                           chainparams.ChainSupplyCheckpointSaplingValue())
+        && applyCheckpoint("nChainOrchardValue",
+                           pindex->nChainOrchardValue,
+                           chainparams.ChainSupplyCheckpointOrchardValue())
+        && applyCheckpoint("nChainLockboxValue",
+                           pindex->nChainLockboxValue,
+                           chainparams.ChainSupplyCheckpointLockboxValue());
+}
+
 // Recompute shielded pool per-block deltas from the actual block data on
 // disk, returning false if they are inconsistent with the persisted values
 // on `pindex`. This is used during LoadBlockIndexDB to ensure that
@@ -5176,10 +5243,36 @@ static bool CheckRecomputedPoolDeltas(const CBlockIndex* pindex, const CChainPar
             "This may indicate on-disk corruption; please restart with -reindex.", __func__,
             pindex->nHeight, chainparams.ChainSupplyCheckpointHeight());
     }
-    return checkDelta("nSproutValue", pindex->nSproutValue.value(), sproutValue)
+    if (!(checkDelta("nSproutValue", pindex->nSproutValue.value(), sproutValue)
         && checkDelta("nSaplingValue", pindex->nSaplingValue, saplingValue)
         && checkDelta("nOrchardValue", pindex->nOrchardValue, orchardValue)
-        && checkDelta("nLockboxValue", pindex->nLockboxValue, lockboxValue);
+        && checkDelta("nLockboxValue", pindex->nLockboxValue, lockboxValue))) {
+        return false;
+    }
+
+    // Verify nChainSupplyDelta for non-genesis blocks. It is deterministic:
+    // equal to subsidy(height) + lockbox_delta(height), as established by
+    // the pre-flush fix in commit e201b90bf. For the genesis block,
+    // nChainSupplyDelta equals the total output value of the coinbase
+    // transaction and is always correct.
+    if (pindex->pprev != nullptr) {
+        if (!pindex->nChainSupplyDelta.has_value()) {
+            return error("%s: nChainSupplyDelta missing at height %d. "
+                "This may indicate on-disk corruption; please restart with -reindex.",
+                __func__, pindex->nHeight);
+        }
+        const CAmount expectedDelta =
+            chainparams.GetConsensus().GetBlockSubsidy(pindex->nHeight) + lockboxValue;
+        if (pindex->nChainSupplyDelta.value() != expectedDelta) {
+            return error("%s: nChainSupplyDelta mismatch at height %d: "
+                "persisted %d, recomputed (subsidy+lockbox) %d. "
+                "This may indicate on-disk corruption; please restart with -reindex.",
+                __func__, pindex->nHeight,
+                pindex->nChainSupplyDelta.value(), expectedDelta);
+        }
+    }
+
+    return true;
 }
 
 // Compute the effect of `block` on the chain supply and the value in each value pool.
@@ -6112,6 +6205,22 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
     {
         CBlockIndex* pindex = item.second;
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
+
+        // Detect the case where a block was previously validated (has
+        // BLOCK_PARTIALLY_VALID_TRANSACTIONS or higher) but has no
+        // transaction data. On a non-pruned node this implies on-disk
+        // corruption and would incorrectly skip CheckRecomputedPoolDeltas
+        // below. (Backport of Zcash commit 307b628a5.)
+        if (pindex->nTx == 0
+                && pindex->IsValid(BLOCK_VALID_TRANSACTIONS)
+                && pindex->nHeight >= chainparams.ChainSupplyCheckpointHeight()
+                && !fHavePruned) {
+            return error("LoadBlockIndexDB(): block at height %d was previously validated "
+                "but has no transaction data; cannot verify pool deltas. "
+                "Please restart with -reindex.",
+                pindex->nHeight);
+        }
+
         // We can link the chain of blocks for which we've received transactions at some point.
         // Pruned nodes may have deleted the block.
         if (pindex->nTx > 0) {
@@ -6152,16 +6261,23 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
                     }
 
                     // Verify persisted pool deltas against recomputed values
-                    // from block data to detect on-disk corruption.
-                    if (pindex->nStatus & BLOCK_HAVE_DATA) {
-                        if (!CheckRecomputedPoolDeltas(pindex, chainparams, fHavePruned)) {
-                            return false;
-                        }
+                    // from block data to detect on-disk corruption. Only
+                    // enforced at/after the chain supply checkpoint height,
+                    // matching Zcash. The fHavePruned flag lets the check
+                    // tolerate missing block data on pruned nodes.
+                    if (pindex->nHeight >= chainparams.ChainSupplyCheckpointHeight()
+                            && !CheckRecomputedPoolDeltas(pindex, chainparams, fHavePruned)) {
+                        return false;
                     }
 
                     // Accumulate chain pool values from parent with range checks.
                     if (!AccumulateChainPoolValues(pindex)) {
                         return error("LoadBlockIndexDB(): AccumulateChainPoolValues failed at height %d", pindex->nHeight);
+                    }
+
+                    // Anchor chain supply and pool totals at the checkpoint.
+                    if (!FallbackChainSupplyCheckpoint(pindex, chainparams)) {
+                        return false;
                     }
                 } else {
                     pindex->nChainTx = 0;
@@ -6180,6 +6296,11 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
                 pindex->nChainTransparentValue = pindex->nTransparentValue;
                 if (!AccumulateChainPoolValues(pindex)) {
                     return error("LoadBlockIndexDB(): AccumulateChainPoolValues failed for genesis block");
+                }
+                // (Checkpoint call is a no-op at genesis unless the checkpoint
+                // height is configured to 0, but include for consistency.)
+                if (!FallbackChainSupplyCheckpoint(pindex, chainparams)) {
+                    return false;
                 }
             }
 

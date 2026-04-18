@@ -65,6 +65,14 @@ public:
     CAmount SproutValuePoolCheckpointHeight() const { return nSproutValuePoolCheckpointHeight; }
     CAmount SproutValuePoolCheckpointBalance() const { return nSproutValuePoolCheckpointBalance; }
     uint256 SproutValuePoolCheckpointBlockHash() const { return hashSproutValuePoolCheckpointBlock; }
+    int ChainSupplyCheckpointHeight() const { return nChainSupplyCheckpointHeight; }
+    CAmount ChainSupplyCheckpointTotalSupply() const { return nChainSupplyCheckpointTotalSupply; }
+    CAmount ChainSupplyCheckpointTransparentValue() const { return nChainSupplyCheckpointTransparentValue; }
+    CAmount ChainSupplyCheckpointSproutValue() const { return nChainSupplyCheckpointSproutValue; }
+    CAmount ChainSupplyCheckpointSaplingValue() const { return nChainSupplyCheckpointSaplingValue; }
+    CAmount ChainSupplyCheckpointOrchardValue() const { return nChainSupplyCheckpointOrchardValue; }
+    CAmount ChainSupplyCheckpointLockboxValue() const { return nChainSupplyCheckpointLockboxValue; }
+    uint256 ChainSupplyCheckpointBlockHash() const { return hashChainSupplyCheckpointBlock; }
     bool ZIP209Enabled() const { return fZIP209Enabled; }
     bool RequireWalletBackup() const { return fRequireWalletBackup; }
 
@@ -134,6 +142,14 @@ protected:
     CAmount nSproutValuePoolCheckpointHeight = 0;
     CAmount nSproutValuePoolCheckpointBalance = 0;
     uint256 hashSproutValuePoolCheckpointBlock;
+    int nChainSupplyCheckpointHeight = 0;
+    CAmount nChainSupplyCheckpointTotalSupply = 0;
+    CAmount nChainSupplyCheckpointTransparentValue = 0;
+    CAmount nChainSupplyCheckpointSproutValue = 0;
+    CAmount nChainSupplyCheckpointSaplingValue = 0;
+    CAmount nChainSupplyCheckpointOrchardValue = 0;
+    CAmount nChainSupplyCheckpointLockboxValue = 0;
+    uint256 hashChainSupplyCheckpointBlock;
     bool fZIP209Enabled = false;
     bool fRequireWalletBackup = false;
 };

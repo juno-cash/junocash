@@ -216,9 +216,10 @@ public:
             boost::assign::map_list_of
             (0, consensus.hashGenesisBlock)
             (29453, uint256S("0x000000460b68ba29bc26af81f40d9ff798afbcac35ae3db80bc12cfaf78b9beb"))
-            (49000, uint256S("0x00000000269763d45087dfb138ea4ed4bf33e9ab39a6aed2705aca72e4471e69")),
-            1766015923,  // UNIX timestamp of last checkpoint block (49000)
-            55276,       // total number of transactions between genesis and last checkpoint
+            (49000, uint256S("0x00000000269763d45087dfb138ea4ed4bf33e9ab39a6aed2705aca72e4471e69"))
+            (223000, uint256S("0x000000003b6c6139e41a39f9c02373d3a292ece1550ae3b4119de6804491ac40")),
+            1776469572,  // UNIX timestamp of last checkpoint block (223000)
+            251544,      // estimated total number of transactions between genesis and last checkpoint
             1000         // estimated number of transactions per day after checkpoint
         };
 
@@ -227,6 +228,19 @@ public:
         nSproutValuePoolCheckpointBalance = 0;
         fZIP209Enabled = true;
         hashSproutValuePoolCheckpointBlock = consensus.hashGenesisBlock;
+
+        // Chain supply checkpoint at block 223000. Values obtained from a
+        // fully-synced mainnet node on 2026-04-18. Sprout and Sapling are
+        // always 0 since those transaction types cannot be included in
+        // Junocash blocks.
+        nChainSupplyCheckpointHeight           = 223000;
+        nChainSupplyCheckpointTotalSupply      = 202124999990004;
+        nChainSupplyCheckpointTransparentValue = 4665834554965;
+        nChainSupplyCheckpointSproutValue      = 0;
+        nChainSupplyCheckpointSaplingValue     = 0;
+        nChainSupplyCheckpointOrchardValue     = 197459165435039;
+        nChainSupplyCheckpointLockboxValue     = 0;
+        hashChainSupplyCheckpointBlock = uint256S("000000003b6c6139e41a39f9c02373d3a292ece1550ae3b4119de6804491ac40");
 
         // Juno Cash: No founders reward (0% dev tax)
         vFoundersRewardAddress = {};
@@ -378,13 +392,14 @@ public:
         fTestnetToBeDeprecatedFieldRPC = true;
 
 
-        // Juno Cash: Reset checkpoint data for new chain
+        // Junocash: Testnet checkpoint data
         checkpointData = (CCheckpointData) {
             boost::assign::map_list_of
-            (0, consensus.hashGenesisBlock),
-            0,  // UNIX timestamp of last checkpoint block
-            0,  // total number of transactions between genesis and last checkpoint
-            0   // estimated number of transactions per day after checkpoint
+            (0, consensus.hashGenesisBlock)
+            (173000, uint256S("0x0002517b5072036abc183da6e28591651d1573926a4cef71fa969cae40a174d6")),
+            1776460711,  // UNIX timestamp of last checkpoint block (173000)
+            190300,      // estimated total number of transactions between genesis and last checkpoint
+            1000         // estimated number of transactions per day after checkpoint
         };
 
         // Juno Cash: Reset Sprout value pool checkpoint (no Sprout activity on new chain)
@@ -392,6 +407,17 @@ public:
         nSproutValuePoolCheckpointBalance = 0;
         fZIP209Enabled = true;
         hashSproutValuePoolCheckpointBlock = consensus.hashGenesisBlock;
+
+        // Chain supply checkpoint at block 173000 (testnet). Values obtained
+        // from a fully-synced testnet node on 2026-04-18.
+        nChainSupplyCheckpointHeight           = 173000;
+        nChainSupplyCheckpointTotalSupply      = 170874999990004;
+        nChainSupplyCheckpointTransparentValue = 162221168596972;
+        nChainSupplyCheckpointSproutValue      = 0;
+        nChainSupplyCheckpointSaplingValue     = 0;
+        nChainSupplyCheckpointOrchardValue     = 8653831393032;
+        nChainSupplyCheckpointLockboxValue     = 0;
+        hashChainSupplyCheckpointBlock = uint256S("0002517b5072036abc183da6e28591651d1573926a4cef71fa969cae40a174d6");
 
         // Juno Cash: No founders reward (0% dev tax)
         vFoundersRewardAddress = {};
