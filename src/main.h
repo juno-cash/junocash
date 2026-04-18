@@ -60,8 +60,6 @@ class PrecomputedTransactionData;
 
 struct CNodeStateStats;
 
-/** Default for accepting alerts from the P2P network. */
-static const bool DEFAULT_ALERTS = true;
 /** Maximum reorg length we will accept before we shut down and alert the user. */
 static const unsigned int MAX_REORG_LENGTH = COINBASE_MATURITY - 1;
 /** Default for DEFAULT_WHITELISTRELAY. */
@@ -223,7 +221,7 @@ extern CAmount maxTxFee;
 /** Limit on the number of unpaid actions a transaction can have to be accepted to the mempool. */
 extern CAmount nTxUnpaidActionLimit;
 /** Whether alert messages are processed. */
-extern bool fAlerts;
+// P2P alert system removed
 /** If the tip is older than this (in seconds), the node is considered to be in initial block download. */
 extern int64_t nMaxTipAge;
 

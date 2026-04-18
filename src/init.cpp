@@ -79,8 +79,6 @@
 
 using namespace boost::placeholders;
 
-extern void ThreadSendAlert();
-
 TracingHandle* pTracingHandle = nullptr;
 
 static const bool DEFAULT_PROXYRANDOMIZE = true;
@@ -326,7 +324,6 @@ std::string HelpMessage(HelpMessageMode mode)
     std::string strUsage = HelpMessageGroup(_("Options:"));
     strUsage += HelpMessageOpt("-?", _("Print this help message and exit"));
     strUsage += HelpMessageOpt("-version", _("Print version and exit"));
-    strUsage += HelpMessageOpt("-alerts", strprintf(_("Receive and display P2P network alerts (default: %u)"), DEFAULT_ALERTS));
     strUsage += HelpMessageOpt("-alertnotify=<cmd>", _("Execute command when a relevant alert is received or we see a really long fork (%s in cmd is replaced by message)"));
     strUsage += HelpMessageOpt("-allowdeprecated=<feature>", strprintf(_("Explicitly allow the use of the specified deprecated feature. Multiple instances of this parameter are permitted; values for <feature> must be selected from among {%s}"), GetAllowableDeprecatedFeatures()));
     strUsage += HelpMessageOpt("-blocknotify=<cmd>", _("Execute command when the best block changes (%s in cmd is replaced by block hash)"));
@@ -1234,8 +1231,6 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         return InitError(_("-txunpaidactionlimit cannot be configured with a negative value."));
     }
     nTxUnpaidActionLimit = GetArg("-txunpaidactionlimit", DEFAULT_TX_UNPAID_ACTION_LIMIT);
-
-    fAlerts = GetBoolArg("-alerts", DEFAULT_ALERTS);
 
     // Option to startup with mocktime set (used for regression testing);
     // a mocktime of 0 (the default) selects the system clock.
@@ -2206,9 +2201,6 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         threadGroup.create_thread(boost::bind(&ThreadFlushWalletDB, boost::ref(pwalletMain->strWalletFile)));
     }
 #endif
-
-    // SENDALERT
-    threadGroup.create_thread(boost::bind(ThreadSendAlert));
 
     return !fRequestShutdown;
 }

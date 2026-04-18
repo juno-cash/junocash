@@ -103,7 +103,7 @@ bool fIBDSkipTxVerification = DEFAULT_IBD_SKIP_TX_VERIFICATION;
 bool fCoinbaseEnforcedShieldingEnabled = true;
 size_t nCoinCacheUsage = 5000 * 300;
 uint64_t nPruneTarget = 0;
-bool fAlerts = DEFAULT_ALERTS;
+// P2P alert system removed. Local alerting via -alertnotify is retained.
 int64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
 
 std::optional<unsigned int> expiryDeltaArg = std::nullopt;
@@ -7871,13 +7871,6 @@ bool static ProcessMessage(const CChainParams& chainparams, CNode* pfrom, string
             }
         }
 
-        // Relay alerts
-        {
-            LOCK(cs_mapAlerts);
-            for (std::pair<const uint256, CAlert>& item : mapAlerts)
-                item.second.RelayTo(pfrom);
-        }
-
         pfrom->nTimeOffset = timeWarning.AddTimeData(pfrom->addr, nTime, GetTime());
         pfrom->fSuccessfullyConnected = true;
 
@@ -8563,38 +8556,6 @@ bool static ProcessMessage(const CChainParams& chainparams, CNode* pfrom, string
     }
 
 
-    else if (fAlerts && strCommand == "alert")
-    {
-        CAlert alert;
-        vRecv >> alert;
-
-        uint256 alertHash = alert.GetHash();
-        if (pfrom->setKnown.count(alertHash) == 0)
-        {
-            if (alert.ProcessAlert(chainparams.AlertKey()))
-            {
-                // Relay
-                pfrom->setKnown.insert(alertHash);
-                {
-                    LOCK(cs_vNodes);
-                    for (CNode* pnode : vNodes)
-                        alert.RelayTo(pnode);
-                }
-            }
-            else {
-                // Small DoS penalty so peers that send us lots of
-                // duplicate/expired/invalid-signature/whatever alerts
-                // eventually get banned.
-                // This isn't a Misbehaving(100) (immediate ban) because the
-                // peer might be an older or different implementation with
-                // a different signature key, etc.
-                LOCK(cs_main);
-                Misbehaving(pfrom->GetId(), 10);
-            }
-        }
-    }
-
-
     else if (!(nLocalServices & NODE_BLOOM) &&
               (strCommand == "filterload" ||
                strCommand == "filteradd"))
@@ -8697,7 +8658,7 @@ bool static ProcessMessage(const CChainParams& chainparams, CNode* pfrom, string
         // message would be undesirable as we transmit it ourselves.
     }
 
-    else if (!(strCommand == "tx" || strCommand == "block" || strCommand == "headers" || strCommand == "alert")) {
+    else if (!(strCommand == "tx" || strCommand == "block" || strCommand == "headers")) {
         // Ignore unknown commands for extensibility
         LogPrint("net", "Unknown command \"%s\" from peer=%d\n", SanitizeString(strCommand), pfrom->id);
     }
