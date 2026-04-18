@@ -3270,66 +3270,51 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         return true;
     }
 
-    // Reject a block that results in a negative shielded value pool balance.
+    // Orchard and Lockbox chain pool values are always populated at ConnectBlock
+    // because AccumulateChainPoolValues is called in both SetChainPoolValues
+    // (TestBlockValidity path) and ReceivedBlockTransactions (normal path).
+    assert(pindex->nChainOrchardValue.has_value());
+    assert(pindex->nChainLockboxValue.has_value());
+
+    // Reject a block that results in a shielded value pool balance outside
+    // the valid range [0, MAX_MONEY].
     if (chainparams.ZIP209Enabled()) {
-        // Sprout
-        //
-        // We can expect nChainSproutValue to be valid after the hardcoded
-        // height, and this will be enforced on all descendant blocks. If
-        // the node was reindexed then this will be enforced for all blocks.
+        // Sprout - conditional because Junocash has no Sprout transactions
+        // and the chain value may be nullopt on legacy block indexes.
         if (pindex->nChainSproutValue) {
-            if (*pindex->nChainSproutValue < 0) {
-                return state.DoS(100, error("%s: turnstile violation in Sprout shielded value pool", __func__),
+            if (!MoneyRange(*pindex->nChainSproutValue)) {
+                return state.DoS(100, error("%s: turnstile violation in Sprout shielded value pool "
+                             "(balance=%d at height %d)", __func__,
+                             *pindex->nChainSproutValue, pindex->nHeight),
                              REJECT_INVALID, "turnstile-violation-sprout-shielded-pool");
             }
         }
 
-        // Sapling
-        //
-        // If we've reached ConnectBlock, we have all transactions of
-        // parents and can expect nChainSaplingValue not to be std::nullopt.
-        // However, the miner and mining RPCs may not have populated this
-        // value and will call `TestBlockValidity`. So, we act
-        // conditionally.
+        // Sapling - conditional because Junocash has no Sapling transactions
         if (pindex->nChainSaplingValue) {
-            if (*pindex->nChainSaplingValue < 0) {
-                return state.DoS(100, error("%s: turnstile violation in Sapling shielded value pool", __func__),
+            if (!MoneyRange(*pindex->nChainSaplingValue)) {
+                return state.DoS(100, error("%s: turnstile violation in Sapling shielded value pool "
+                             "(balance=%d at height %d)", __func__,
+                             *pindex->nChainSaplingValue, pindex->nHeight),
                              REJECT_INVALID, "turnstile-violation-sapling-shielded-pool");
             }
         }
 
-        // Orchard
-        //
-        // If we've reached ConnectBlock, we have all transactions of
-        // parents and can expect nChainOrchardValue not to be std::nullopt.
-        // However, the miner and mining RPCs may not have populated this
-        // value and will call `TestBlockValidity`. So, we act
-        // conditionally.
-        if (pindex->nChainOrchardValue) {
-            if (*pindex->nChainOrchardValue < 0) {
-                return state.DoS(100, error("%s: turnstile violation in Orchard shielded value pool", __func__),
-                                 REJECT_INVALID, "turnstile-violation-orchard");
-            }
+        // Orchard - unconditional, always populated
+        if (!MoneyRange(pindex->nChainOrchardValue.value())) {
+            return state.DoS(100, error("%s: turnstile violation in Orchard shielded value pool "
+                             "(balance=%d at height %d)", __func__,
+                             pindex->nChainOrchardValue.value(), pindex->nHeight),
+                             REJECT_INVALID, "turnstile-violation-orchard");
         }
     }
 
-    // Lockbox
-    //
-    // This check is a necessary consensus rule when transaction-defined
-    // lockbox disbursement is present. zcashd will never implement v6
-    // transactions, and so this check in practice is defending against
-    // a programming error in defining the one-time lockbox disbursement(s).
-    //
-    // If we've reached ConnectBlock, we have all transactions of
-    // parents and can expect nChainLockboxValue not to be std::nullopt.
-    // However, the miner and mining RPCs may not have populated this
-    // value and will call `TestBlockValidity`. So, we act
-    // conditionally.
-    if (pindex->nChainLockboxValue) {
-        if (*pindex->nChainLockboxValue < 0) {
-            return state.DoS(100, error("%s: invalid lockbox disbursement amount", __func__),
-                             REJECT_INVALID, "invalid-lockbox-disbursement-amount");
-        }
+    // Lockbox - unconditional, always populated
+    if (!MoneyRange(pindex->nChainLockboxValue.value())) {
+        return state.DoS(100, error("%s: invalid lockbox value pool balance "
+                         "(balance=%d at height %d)", __func__,
+                         pindex->nChainLockboxValue.value(), pindex->nHeight),
+                         REJECT_INVALID, "invalid-lockbox-disbursement-amount");
     }
 
     // Do not allow blocks that contain transactions which 'overwrite' older transactions,
@@ -3887,6 +3872,15 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             pindex->nChainOrchardValue.has_value() &&
             pindex->nChainLockboxValue.has_value())
     {
+        // Verify all pool values are in range before summing
+        assert(MoneyRange(pindex->nChainTransparentValue.value()));
+        assert(MoneyRange(pindex->nChainSproutValue.value()));
+        assert(MoneyRange(pindex->nChainSaplingValue.value()));
+        assert(MoneyRange(pindex->nChainOrchardValue.value()));
+        assert(MoneyRange(pindex->nChainLockboxValue.value()));
+        // Five MoneyRange values each <= MAX_MONEY. 5 * MAX_MONEY < INT64_MAX.
+        static_assert(5 * MAX_MONEY < std::numeric_limits<CAmount>::max(),
+                      "sum of five MoneyRange values must fit in CAmount");
         auto expectedChainSupply =
             pindex->nChainTransparentValue.value() +
             pindex->nChainSproutValue.value() +
@@ -3894,9 +3888,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             pindex->nChainOrchardValue.value() +
             pindex->nChainLockboxValue.value();
         if (expectedChainSupply != pindex->nChainTotalSupply.value()) {
-            // This may be added as a rule to ZIP 209 and return a failure in a future soft-fork.
-            error("%s: chain total supply (%d) does not match sum of pool balances (%d) at height %d", __func__,
-                    pindex->nChainTotalSupply.value(), expectedChainSupply, pindex->nHeight);
+            return AbortNode(state,
+                strprintf("The chain total supply (%d) does not match the sum of the pool balances (%d) at height %d. "
+                          "This indicates a fatal problem with the node's pool accounting. "
+                          "Please restart with -reindex.",
+                          pindex->nChainTotalSupply.value(), expectedChainSupply, pindex->nHeight));
         }
     }
 
