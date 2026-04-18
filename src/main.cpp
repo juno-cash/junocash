@@ -5038,6 +5038,15 @@ bool ReceivedBlockTransactions(
     CBlockIndex *pindexNew,
     const CDiskBlockPos& pos)
 {
+    // Compute per-block pool deltas and seed chain values. This is the single
+    // call site for SetChainPoolValues in the block reception path: it happens
+    // only after AcceptBlock has passed validation and written the block to
+    // disk, so pool values are never set on rejected or duplicate blocks.
+    // (Backport of Zcash commit 15a797672.)
+    if (!SetChainPoolValues(chainparams, block, pindexNew)) {
+        return error("ReceivedBlockTransactions(): SetChainPoolValues failed");
+    }
+
     pindexNew->nTx = block.vtx.size();
     pindexNew->nChainTx = 0;
 
@@ -5517,10 +5526,6 @@ static bool AcceptBlock(const CBlock& block, CValidationState& state, const CCha
     if (!AcceptBlockHeader(block, state, chainparams, &pindex))
         return false;
 
-    if (!SetChainPoolValues(chainparams, block, pindex)) {
-        return error("AcceptBlock(): SetChainPoolValues failed");
-    }
-
     // Try to process all requested blocks that we don't have, but only
     // process an unrequested block if it's new and has enough work to
     // advance our tip, and isn't too many blocks ahead.
@@ -5541,6 +5546,11 @@ static bool AcceptBlock(const CBlock& block, CValidationState& state, const CCha
         if (!fHasMoreWork) return true;     // Don't process less-work chains
         if (fTooFarAhead) return true;      // Block height is too high
     }
+
+    // SetChainPoolValues is now called from ReceivedBlockTransactions only,
+    // after validation passes and the block is written to disk. This matches
+    // Zcash upstream (commit 15a797672) and ensures pool values are never set
+    // on rejected or duplicate blocks.
 
     // See method docstring for why these are always disabled.
     auto verifier = ProofVerifier::Disabled();
@@ -6709,10 +6719,8 @@ bool InitBlockIndex(const CChainParams& chainparams)
             if (!WriteBlockToDisk(block, blockPos, chainparams.MessageStart()))
                 return error("LoadBlockIndex(): writing genesis block to disk failed");
             CBlockIndex *pindex = AddToBlockIndex(block, chainparams.GetConsensus());
-            if (!SetChainPoolValues(chainparams, block, pindex)) {
-                return error("InitBlockIndex(): SetChainPoolValues failed for genesis block");
-            }
             setDirtyBlockIndex.insert(pindex);
+            // SetChainPoolValues is called from ReceivedBlockTransactions below.
             if (!ReceivedBlockTransactions(block, state, chainparams, pindex, blockPos)) {
                 return error("LoadBlockIndex(): genesis block not accepted");
             }
