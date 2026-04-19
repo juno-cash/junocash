@@ -4953,8 +4953,23 @@ void FallbackSproutValuePoolBalance(
     }
 }
 
-// Compute per-block shielded pool deltas (Sprout, Sapling, Orchard, lockbox)
-// for `block` at `nHeight` from its transactions and consensus rules.
+// Check the Merkle root of a block against its transactions.
+// Returns true if the root matches and no mutation is detected.
+static bool CheckBlockMerkleRoot(const CBlock& block, bool* mutated)
+{
+    uint256 hashMerkleRoot2 = BlockMerkleRoot(block, mutated);
+    return (block.hashMerkleRoot == hashMerkleRoot2 && !(*mutated));
+}
+
+// Compute per-block pool value deltas from a block's transactions and
+// consensus rules. Used by both SetChainPoolValues (when a new block is
+// received) and CheckRecomputedPoolDeltas (when verifying persisted
+// deltas on load).
+//
+// `corruptionHint` is appended to any range-error message, and should be
+// either "" (for newly-received blocks where an overflow implies a bug or
+// malformed block) or a hint telling the user to reindex (for the on-load
+// path where an overflow implies persisted-data corruption).
 //
 // On success, sets sproutValue, saplingValue, orchardValue, and lockboxValue
 // to the corresponding per-block deltas, and returns true. Returns false if
@@ -4963,6 +4978,7 @@ static bool ComputePoolDeltas(
     const CBlock& block,
     const CChainParams& chainparams,
     int nHeight,
+    const char* corruptionHint,
     CAmount& sproutValue,
     CAmount& saplingValue,
     CAmount& orchardValue,
@@ -4978,16 +4994,16 @@ static bool ComputePoolDeltas(
     for (auto disbursement : chainparams.GetConsensus().GetLockboxDisbursementsForHeight(nHeight)) {
         lockboxValue -= disbursement.GetAmount();
         if (!MoneyDeltaRange(lockboxValue)) {
-            return error("%s: lockbox value delta out of range: %d at height %d", __func__,
-                lockboxValue, nHeight);
+            return error("%s: lockbox value delta out of range: %d at height %d.%s", __func__,
+                lockboxValue, nHeight, corruptionHint);
         }
     }
     for (auto elem : chainparams.GetConsensus().GetActiveFundingStreamElements(nHeight)) {
         if (std::holds_alternative<Consensus::Lockbox>(elem.first)) {
             lockboxValue += elem.second;
             if (!MoneyDeltaRange(lockboxValue)) {
-                return error("%s: lockbox value delta out of range: %d at height %d", __func__,
-                    lockboxValue, nHeight);
+                return error("%s: lockbox value delta out of range: %d at height %d.%s", __func__,
+                    lockboxValue, nHeight, corruptionHint);
             }
         }
     }
@@ -4999,27 +5015,27 @@ static bool ComputePoolDeltas(
         // pool. So we invert the sign here.
         saplingValue -= tx.GetValueBalanceSapling();
         if (!MoneyDeltaRange(saplingValue)) {
-            return error("%s: sapling value delta out of range: %d at height %d", __func__,
-                saplingValue, nHeight);
+            return error("%s: sapling value delta out of range: %d at height %d.%s", __func__,
+                saplingValue, nHeight, corruptionHint);
         }
 
         // valueBalanceOrchard behaves the same way as valueBalanceSapling.
         orchardValue -= tx.GetOrchardBundle().GetValueBalance();
         if (!MoneyDeltaRange(orchardValue)) {
-            return error("%s: orchard value delta out of range: %d at height %d", __func__,
-                orchardValue, nHeight);
+            return error("%s: orchard value delta out of range: %d at height %d.%s", __func__,
+                orchardValue, nHeight, corruptionHint);
         }
 
         for (const auto& js : tx.vJoinSplit) {
             sproutValue += js.vpub_old;
             if (!MoneyDeltaRange(sproutValue)) {
-                return error("%s: sprout value delta out of range: %d at height %d", __func__,
-                    sproutValue, nHeight);
+                return error("%s: sprout value delta out of range: %d at height %d.%s", __func__,
+                    sproutValue, nHeight, corruptionHint);
             }
             sproutValue -= js.vpub_new;
             if (!MoneyDeltaRange(sproutValue)) {
-                return error("%s: sprout value delta out of range: %d at height %d", __func__,
-                    sproutValue, nHeight);
+                return error("%s: sprout value delta out of range: %d at height %d.%s", __func__,
+                    sproutValue, nHeight, corruptionHint);
             }
         }
     }
@@ -5100,6 +5116,72 @@ static bool AccumulateChainPoolValues(CBlockIndex *pindex)
     return true;
 }
 
+// Recompute shielded pool per-block deltas from the actual block data on
+// disk, returning false if they are inconsistent with the persisted values
+// on `pindex`. This is used during LoadBlockIndexDB to ensure that
+// corrupted persisted deltas cannot propagate wrong chain values.
+//
+// The Merkle root is verified against the header (which has already been
+// validated by PoW) to ensure the transactions have not been tampered with
+// on disk. Proofs are NOT re-verified -- only pool deltas are recomputed.
+//
+// If fHavePruned is set, tolerate missing block data (intentional pruning).
+//
+// Returns false on error or if an inconsistency is detected.
+static bool CheckRecomputedPoolDeltas(const CBlockIndex* pindex, const CChainParams& chainparams, bool fHavePruned)
+{
+    CBlock block;
+    if (!ReadBlockFromDisk(block, pindex, chainparams.GetConsensus())) {
+        if (fHavePruned) {
+            return true;
+        } else {
+            return error("%s: failed to read block at height %d from disk. "
+                "This may indicate on-disk corruption; please restart with -reindex.", __func__,
+                pindex->nHeight);
+        }
+    }
+
+    // Verify that the transactions match the header's Merkle root.
+    bool mutated = false;
+    if (!CheckBlockMerkleRoot(block, &mutated)) {
+        return error("%s: Merkle root check failed at height %d (mutated=%s). "
+            "This may indicate on-disk corruption; please restart with -reindex.", __func__,
+            pindex->nHeight, mutated ? "true" : "false");
+    }
+
+    // Recompute pool deltas from the block data.
+    CAmount sproutValue, saplingValue, orchardValue, lockboxValue;
+    if (!ComputePoolDeltas(block, chainparams, pindex->nHeight,
+                           " This may indicate on-disk corruption; please restart with -reindex.",
+                           sproutValue, saplingValue, orchardValue, lockboxValue)) {
+        return false;
+    }
+
+    // Check persisted values against recomputed ones.
+    auto checkDelta = [&](const char* name, CAmount persisted, CAmount recomputed) -> bool {
+        if (persisted != recomputed) {
+            return error("%s: %s mismatch at height %d: persisted %d, recomputed %d. "
+                "This may indicate on-disk corruption; please restart with -reindex.", __func__,
+                name, pindex->nHeight, persisted, recomputed);
+        }
+        return true;
+    };
+
+    // nSproutValue is std::optional and may be nullopt on legacy block indexes
+    // written before SPROUT_VALUE_VERSION, but this should not occur at heights
+    // >= the chain supply checkpoint (where this function is called from).
+    if (!pindex->nSproutValue.has_value()) {
+        return error("%s: Sprout value is nullopt at height %d, which should not occur "
+            "after the chain supply checkpoint at height %d. "
+            "This may indicate on-disk corruption; please restart with -reindex.", __func__,
+            pindex->nHeight, chainparams.ChainSupplyCheckpointHeight());
+    }
+    return checkDelta("nSproutValue", pindex->nSproutValue.value(), sproutValue)
+        && checkDelta("nSaplingValue", pindex->nSaplingValue, saplingValue)
+        && checkDelta("nOrchardValue", pindex->nOrchardValue, orchardValue)
+        && checkDelta("nLockboxValue", pindex->nLockboxValue, lockboxValue);
+}
+
 // Compute the effect of `block` on the chain supply and the value in each value pool.
 // This requires `pindex->nHeight` and `pindex->pprev` to be set, but nothing else.
 //
@@ -5113,7 +5195,7 @@ bool SetChainPoolValues(
     assert(pindex->pprev || pindex->nHeight == 0);
 
     CAmount sproutValue, saplingValue, orchardValue, lockboxValue;
-    if (!ComputePoolDeltas(block, chainparams, pindex->nHeight,
+    if (!ComputePoolDeltas(block, chainparams, pindex->nHeight, "",
                            sproutValue, saplingValue, orchardValue, lockboxValue)) {
         return false;
     }
@@ -6012,6 +6094,11 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
     if (!pblocktree->LoadBlockIndexGuts(InsertBlockIndex, chainparams))
         return false;
 
+    // Check whether we have ever pruned block & undo files
+    pblocktree->ReadFlag("prunedblockfiles", fHavePruned);
+    if (fHavePruned)
+        LogPrintf("LoadBlockIndexDB(): Block files have previously been pruned\n");
+
     // Calculate nChainWork
     vector<pair<int, CBlockIndex*> > vSortedByHeight;
     vSortedByHeight.reserve(mapBlockIndex.size());
@@ -6064,28 +6151,17 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
                         pindex->nChainTransparentValue = std::nullopt;
                     }
 
-                    if (pindex->pprev->nChainSproutValue && pindex->nSproutValue) {
-                        pindex->nChainSproutValue = *pindex->pprev->nChainSproutValue + *pindex->nSproutValue;
-                    } else {
-                        pindex->nChainSproutValue = std::nullopt;
+                    // Verify persisted pool deltas against recomputed values
+                    // from block data to detect on-disk corruption.
+                    if (pindex->nStatus & BLOCK_HAVE_DATA) {
+                        if (!CheckRecomputedPoolDeltas(pindex, chainparams, fHavePruned)) {
+                            return false;
+                        }
                     }
 
-                    if (pindex->pprev->nChainSaplingValue) {
-                        pindex->nChainSaplingValue = *pindex->pprev->nChainSaplingValue + pindex->nSaplingValue;
-                    } else {
-                        pindex->nChainSaplingValue = std::nullopt;
-                    }
-
-                    if (pindex->pprev->nChainOrchardValue) {
-                        pindex->nChainOrchardValue = *pindex->pprev->nChainOrchardValue + pindex->nOrchardValue;
-                    } else {
-                        pindex->nChainOrchardValue = std::nullopt;
-                    }
-
-                    if (pindex->pprev->nChainLockboxValue) {
-                        pindex->nChainLockboxValue = *pindex->pprev->nChainLockboxValue + pindex->nLockboxValue;
-                    } else {
-                        pindex->nChainLockboxValue = std::nullopt;
+                    // Accumulate chain pool values from parent with range checks.
+                    if (!AccumulateChainPoolValues(pindex)) {
+                        return error("LoadBlockIndexDB(): AccumulateChainPoolValues failed at height %d", pindex->nHeight);
                     }
                 } else {
                     pindex->nChainTx = 0;
@@ -6098,13 +6174,13 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
                     mapBlocksUnlinked.insert(std::make_pair(pindex->pprev, pindex));
                 }
             } else {
+                // Genesis block
                 pindex->nChainTx = pindex->nTx;
                 pindex->nChainTotalSupply = pindex->nChainSupplyDelta;
                 pindex->nChainTransparentValue = pindex->nTransparentValue;
-                pindex->nChainSproutValue = pindex->nSproutValue;
-                pindex->nChainSaplingValue = pindex->nSaplingValue;
-                pindex->nChainOrchardValue = pindex->nOrchardValue;
-                pindex->nChainLockboxValue = pindex->nLockboxValue;
+                if (!AccumulateChainPoolValues(pindex)) {
+                    return error("LoadBlockIndexDB(): AccumulateChainPoolValues failed for genesis block");
+                }
             }
 
             // Fall back to hardcoded Sprout value pool balance
@@ -6201,11 +6277,6 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
             return false;
         }
     }
-
-    // Check whether we have ever pruned block & undo files
-    pblocktree->ReadFlag("prunedblockfiles", fHavePruned);
-    if (fHavePruned)
-        LogPrintf("LoadBlockIndexDB(): Block files have previously been pruned\n");
 
     // Check whether we need to continue reindexing
     bool fReindexing = false;
