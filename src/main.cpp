@@ -6188,6 +6188,8 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
     if (fHavePruned)
         LogPrintf("LoadBlockIndexDB(): Block files have previously been pruned\n");
 
+    bool anyHealed = false;
+
     // Calculate nChainWork
     vector<pair<int, CBlockIndex*> > vSortedByHeight;
     vSortedByHeight.reserve(mapBlockIndex.size());
@@ -6215,6 +6217,39 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
                 "but has no transaction data; cannot verify pool deltas. "
                 "Please restart with -reindex.",
                 pindex->nHeight);
+        }
+
+        // Migration: legacy blocks (written before commit e201b90bf) may have
+        // nullopt nChainSupplyDelta persisted because SetChainPoolValues left
+        // the field unset for non-genesis blocks and relied on ConnectBlock to
+        // populate it later. An unclean shutdown between AcceptBlock and
+        // ConnectBlock persisted nullopt. nChainSupplyDelta is deterministically
+        // equal to subsidy(height) + lockbox_delta(height) for non-genesis
+        // blocks; heal in place so the accumulation below and
+        // CheckRecomputedPoolDeltas both see a populated value. Persisted via
+        // the FlushStateToDisk at the end of this function.
+        if (pindex->pprev != nullptr
+                && pindex->nHeight >= chainparams.ChainSupplyCheckpointHeight()
+                && !pindex->nChainSupplyDelta.has_value()) {
+
+            CAmount lockboxDelta = 0;
+            for (auto disbursement : chainparams.GetConsensus().GetLockboxDisbursementsForHeight(pindex->nHeight)) {
+                lockboxDelta -= disbursement.GetAmount();
+            }
+            for (auto elem : chainparams.GetConsensus().GetActiveFundingStreamElements(pindex->nHeight)) {
+                if (std::holds_alternative<Consensus::Lockbox>(elem.first)) {
+                    lockboxDelta += elem.second;
+                }
+            }
+
+            const CAmount healedDelta =
+                chainparams.GetConsensus().GetBlockSubsidy(pindex->nHeight) + lockboxDelta;
+            pindex->nChainSupplyDelta = healedDelta;
+            setDirtyBlockIndex.insert(pindex);
+            anyHealed = true;
+
+            LogPrintf("LoadBlockIndexDB: migrated nullopt nChainSupplyDelta at height %d -> %d\n",
+                pindex->nHeight, healedDelta);
         }
 
         // We can link the chain of blocks for which we've received transactions at some point.
@@ -6510,6 +6545,17 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
         Checkpoints::GuessVerificationProgress(chainparams.Checkpoints(), chainActive.Tip()));
 
     EnforceNodeDeprecation(chainparams, chainActive.Height(), true);
+
+    // Persist any healed nChainSupplyDelta values immediately so a subsequent
+    // SIGKILL / OOM / power loss before the next periodic flush cannot lose
+    // the migration. No-op on clean databases.
+    if (anyHealed) {
+        CValidationState state;
+        if (!FlushStateToDisk(chainparams, state, FLUSH_STATE_ALWAYS)) {
+            return error("LoadBlockIndexDB(): failed to persist healed block indexes");
+        }
+        LogPrintf("LoadBlockIndexDB: flushed healed nChainSupplyDelta values to disk\n");
+    }
 
     return true;
 }
