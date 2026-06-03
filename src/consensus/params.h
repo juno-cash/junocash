@@ -330,6 +330,8 @@ struct Params {
 
     bool FutureTimestampSoftForkActive(int nHeight) const;
 
+    bool TemporaryOrchardDisablingSoftForkActive(int nHeight) const;
+
     bool FeatureActive(int nHeight, Consensus::ConsensusFeature feature) const;
 
     bool FeatureRequired(Consensus::ConsensusFeature feature) const;
@@ -488,6 +490,8 @@ struct Params {
      * activation height in chainparams.cpp.
      */
     int nFutureTimestampSoftForkHeight = 2;
+
+    int nTemporaryOrchardDisablingSoftForkHeight = NetworkUpgrade::NO_ACTIVATION_HEIGHT;
 
     /** Proof of work parameters */
     // Juno Cash: Legacy Equihash parameters removed (uses RandomX instead)

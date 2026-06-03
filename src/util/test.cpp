@@ -310,6 +310,7 @@ const Consensus::Params& RegtestActivateNU5() {
 }
 
 void RegtestDeactivateNU5() {
+    UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT);
     UpdateRegtestPow(0, 0, uint256S("0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"), true);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_NU5, Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_CANOPY, Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT);

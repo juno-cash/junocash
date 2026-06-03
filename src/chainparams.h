@@ -180,6 +180,11 @@ void UpdateRegtestPow(
     bool noRetargeting);
 
 /**
+ * Allows modifying the regtest temporary Orchard disabling soft fork.
+ */
+void UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(int nHeight);
+
+/**
  * Allows modifying the regtest funding stream parameters.
  */
 void UpdateFundingStreamParameters(Consensus::FundingStreamIndex idx, Consensus::FundingStream fs);

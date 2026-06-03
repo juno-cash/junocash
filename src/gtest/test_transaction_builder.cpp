@@ -274,6 +274,60 @@ TEST(TransactionBuilder, TransparentToOrchard)
     RegtestDeactivateNU5();
 }
 
+TEST(TransactionBuilder, TemporaryOrchardDisablingSoftFork)
+{
+    RegtestActivateNU5();
+    const int freezeHeight = 100;
+    UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(freezeHeight);
+
+    CBasicKeyStore keystore;
+    CKey tsk = AddTestCKeyToKeyStore(keystore);
+    auto scriptPubKey = GetScriptForDestination(tsk.GetPubKey().GetID());
+
+    auto coinType = Params().BIP44CoinType();
+    auto seed = MnemonicSeed::Random(coinType);
+    auto sk = libzcash::OrchardSpendingKey::ForAccount(seed, coinType, 0);
+    auto fvk = sk.ToFullViewingKey();
+    auto ivk = fvk.ToIncomingViewingKey();
+    libzcash::diversifier_index_t j(0);
+    auto recipient = ivk.Address(j);
+
+    auto orchardAnchor = uint256();
+    auto builder = TransactionBuilder(Params(), freezeHeight - 1, orchardAnchor, SaplingMerkleTree::empty_root(), &keystore);
+    builder.AddTransparentInput(COutPoint(uint256S("1234"), 0), scriptPubKey, 5000);
+    builder.AddOrchardOutput(std::nullopt, recipient, 4000, std::nullopt);
+    auto tx = builder.Build().GetTxOrThrow();
+    ASSERT_FALSE(tx.IsCoinBase());
+    ASSERT_TRUE(tx.GetOrchardBundle().IsPresent());
+
+    CValidationState beforeFreezeState;
+    EXPECT_TRUE(ContextualCheckTransaction(tx, beforeFreezeState, Params(), freezeHeight - 1, true));
+    EXPECT_EQ(beforeFreezeState.GetRejectReason(), "");
+
+    CValidationState atFreezeState;
+    EXPECT_FALSE(ContextualCheckTransaction(tx, atFreezeState, Params(), freezeHeight, true));
+    EXPECT_EQ(atFreezeState.GetRejectReason(), "bad-tx-has-orchard-actions");
+
+    auto coinbaseMtx = CreateNewContextualCMutableTransaction(Params().GetConsensus(), freezeHeight, false);
+    coinbaseMtx.vin.resize(1);
+    coinbaseMtx.vin[0].prevout.SetNull();
+    coinbaseMtx.vin[0].scriptSig = CScript() << freezeHeight << OP_0;
+    coinbaseMtx.vout.resize(1);
+    coinbaseMtx.vout[0].scriptPubKey = CScript() << OP_TRUE;
+    coinbaseMtx.vout[0].nValue = 0;
+    coinbaseMtx.nExpiryHeight = freezeHeight;
+    CTransaction coinbaseTx(coinbaseMtx);
+    ASSERT_TRUE(coinbaseTx.IsCoinBase());
+    ASSERT_FALSE(coinbaseTx.GetOrchardBundle().IsPresent());
+
+    CValidationState coinbaseState;
+    EXPECT_TRUE(ContextualCheckTransaction(coinbaseTx, coinbaseState, Params(), freezeHeight, true));
+    EXPECT_EQ(coinbaseState.GetRejectReason(), "");
+
+    UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT);
+    RegtestDeactivateNU5();
+}
+
 TEST(TransactionBuilder, ThrowsOnTransparentInputWithoutKeyStore)
 {
     SelectParams(CBaseChainParams::REGTEST);

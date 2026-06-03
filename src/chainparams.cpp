@@ -143,6 +143,7 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_NU6].nActivationHeight = 2;
         consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nProtocolVersion = 170140;
         consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nActivationHeight = 3;
+        consensus.nTemporaryOrchardDisablingSoftForkHeight = 289500;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nProtocolVersion = 0x7FFFFFFF;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nActivationHeight =
             Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
@@ -585,6 +586,11 @@ public:
         consensus.fPowNoRetargeting = noRetargeting;
     }
 
+    void UpdateTemporaryOrchardDisablingSoftForkHeight(int nHeight)
+    {
+        consensus.nTemporaryOrchardDisablingSoftForkHeight = nHeight;
+    }
+
     void SetRegTestZIP209Enabled() {
         fZIP209Enabled = true;
     }
@@ -699,4 +705,9 @@ void UpdateRegtestPow(
     bool noRetargeting)
 {
     regTestParams.UpdateRegtestPow(nPowMaxAdjustDown, nPowMaxAdjustUp, powLimit, noRetargeting);
+}
+
+void UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(int nHeight)
+{
+    regTestParams.UpdateTemporaryOrchardDisablingSoftForkHeight(nHeight);
 }

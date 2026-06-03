@@ -1332,6 +1332,14 @@ bool ContextualCheckTransaction(
         }
     }
 
+    // Soft fork: temporarily require transactions to not contain Orchard actions.
+    if (consensus.TemporaryOrchardDisablingSoftForkActive(nHeight) &&
+        orchard_bundle.IsPresent()) {
+        return state.Invalid(
+            error("ContextualCheckTransaction(): transaction has Orchard actions (temporarily disabled)"),
+            REJECT_INVALID, "bad-tx-has-orchard-actions");
+    }
+
     // Rules that apply to the future epoch
     if (futureActive) {
         switch (tx.nVersionGroupId) {
@@ -4404,6 +4412,10 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
 
     for (auto id : ids) {
         uiInterface.NotifyTxExpiration(id);
+    }
+
+    if (chainparams.GetConsensus().nTemporaryOrchardDisablingSoftForkHeight == pindexNew->nHeight + 1) {
+        mempool.removeContainingOrchard();
     }
 
     // Update chainActive & related variables.
