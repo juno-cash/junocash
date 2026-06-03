@@ -82,6 +82,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            apt-cacher-ng \
             autoconf \
             automake \
             build-essential \
@@ -91,6 +92,12 @@ jobs:
             pkg-config \
             python3 \
             ruby
+
+      - name: Start apt-cacher-ng
+        run: |
+          sudo sed -i 's/^#\?BindAddress:.*/BindAddress: 0.0.0.0/' /etc/apt-cacher-ng/acng.conf
+          sudo systemctl restart apt-cacher-ng
+          curl --fail --silent --show-error http://127.0.0.1:3142/acng-report.html >/dev/null
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
