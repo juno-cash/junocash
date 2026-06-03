@@ -25,11 +25,9 @@ from test_framework.util import (
     NU6_1_BRANCH_ID,
     NU6_2_BRANCH_ID,
     assert_equal,
-    connect_nodes_bi,
+    get_coinbase_address,
     nuparams,
-    start_node,
     start_nodes,
-    stop_node,
     wait_and_assert_operationid_status,
 )
 from test_framework.zip317 import conventional_fee
@@ -38,18 +36,18 @@ from test_framework.zip317 import conventional_fee
 class OrchardNU6_2Test(BitcoinTestFramework):
     def __init__(self):
         super().__init__()
-        self.num_nodes = 3
+        self.num_nodes = 1
         self.cache_behavior = 'clean'
 
     def network_upgrade_args(self):
         return [
             nuparams(BLOSSOM_BRANCH_ID, 1),
-            nuparams(HEARTWOOD_BRANCH_ID, 1),
-            nuparams(CANOPY_BRANCH_ID, 1),
-            nuparams(NU5_BRANCH_ID, 2),
-            nuparams(NU6_BRANCH_ID, 3),
-            nuparams(NU6_1_BRANCH_ID, 4),
-            nuparams(NU6_2_BRANCH_ID, 5),
+            nuparams(HEARTWOOD_BRANCH_ID, 5),
+            nuparams(CANOPY_BRANCH_ID, 5),
+            nuparams(NU5_BRANCH_ID, 10),
+            nuparams(NU6_BRANCH_ID, 20),
+            nuparams(NU6_1_BRANCH_ID, 30),
+            nuparams(NU6_2_BRANCH_ID, 105),
         ]
 
     def setup_nodes(self):
@@ -59,58 +57,53 @@ class OrchardNU6_2Test(BitcoinTestFramework):
             extra_args=[self.network_upgrade_args()] * self.num_nodes)
 
     def run_test(self):
-        acct1 = self.nodes[1].z_getnewaccount()['account']
-        ua1 = self.nodes[1].z_getaddressforaccount(acct1, ['orchard'])['address']
+        node = self.nodes[0]
+
+        node.generate(103)
+        assert_equal(node.getblockcount(), 103)
+
+        acct1 = node.z_getnewaccount()['account']
+        ua1 = node.z_getaddressforaccount(acct1, ['orchard'])['address']
         assert_equal(
             {'pools': {}, 'minimum_confirmations': 1},
-            self.nodes[1].z_getbalanceforaccount(acct1))
+            node.z_getbalanceforaccount(acct1))
 
-        acct2 = self.nodes[2].z_getnewaccount()['account']
-        ua2 = self.nodes[2].z_getaddressforaccount(acct2, ['orchard'])['address']
+        acct2 = node.z_getnewaccount()['account']
+        ua2 = node.z_getaddressforaccount(acct2, ['orchard'])['address']
 
-        stop_node(self.nodes[1], 1)
-        self.nodes[1] = start_node(
-            1,
-            self.options.tmpdir,
-            self.network_upgrade_args() + ["-mineraddress=%s" % ua1])
-        connect_nodes_bi(self.nodes, 0, 1)
-        connect_nodes_bi(self.nodes, 1, 2)
+        coinbase_fee = conventional_fee(3)
+        coinbase_amount = Decimal('10') - coinbase_fee
+        opid = node.z_sendmany(
+            get_coinbase_address(node),
+            [{"address": ua1, "amount": coinbase_amount}],
+            1, coinbase_fee, 'AllowRevealedSenders')
+        wait_and_assert_operationid_status(node, opid)
 
-        self.nodes[0].generate(3)
-        self.sync_all()
-        assert_equal(self.nodes[0].getblockcount(), 3)
+        node.generate(1)
+        assert_equal(node.getblockcount(), 104)
 
-        self.nodes[1].generate(1)
-        self.sync_all()
-        assert_equal(self.nodes[0].getblockcount(), 4)
-
-        acct1_balance = self.nodes[1].z_getbalanceforaccount(acct1)
-        coinbase_zats = acct1_balance['pools']['orchard']['valueZat']
-        assert coinbase_zats > 0
         assert_equal(
-            {'pools': {'orchard': {'valueZat': coinbase_zats}}, 'minimum_confirmations': 1},
-            acct1_balance)
+            {'pools': {'orchard': {'valueZat': coinbase_amount * COIN}}, 'minimum_confirmations': 1},
+            node.z_getbalanceforaccount(acct1))
 
         spend_fee = conventional_fee(2)
         spend_amount = Decimal('1')
-        opid = self.nodes[1].z_sendmany(
+        opid = node.z_sendmany(
             ua1, [{"address": ua2, "amount": spend_amount}], 1, spend_fee)
-        wait_and_assert_operationid_status(self.nodes[1], opid)
+        wait_and_assert_operationid_status(node, opid)
 
-        self.sync_all()
-        assert_equal(len(self.nodes[1].getrawmempool()), 1)
+        assert_equal(len(node.getrawmempool()), 1)
 
-        self.nodes[1].generate(1)
-        self.sync_all()
-        assert_equal(len(self.nodes[1].getrawmempool()), 0)
+        node.generate(1)
+        assert_equal(len(node.getrawmempool()), 0)
 
         assert_equal(
             {'pools': {'orchard': {'valueZat': spend_amount * COIN}}, 'minimum_confirmations': 1},
-            self.nodes[2].z_getbalanceforaccount(acct2))
+            node.z_getbalanceforaccount(acct2))
         assert_equal(
-            {'pools': {'orchard': {'valueZat': coinbase_zats - ((spend_amount + spend_fee) * COIN)}}, 'minimum_confirmations': 1},
-            self.nodes[1].z_getbalanceforaccount(acct1))
-        assert_equal(self.nodes[0].getblockcount(), 5)
+            {'pools': {'orchard': {'valueZat': (coinbase_amount - spend_amount - spend_fee) * COIN}}, 'minimum_confirmations': 1},
+            node.z_getbalanceforaccount(acct1))
+        assert_equal(node.getblockcount(), 105)
 
 
 if __name__ == '__main__':
