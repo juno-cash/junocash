@@ -126,9 +126,7 @@ void BuildOrchardSpend(CTransaction& outTx, int nHeight = 2, std::optional<bool>
             nHeight,
             SaplingMerkleTree::empty_root().ToRawBytes(),
             false);
-        auto maybeSaplingBundle = sapling::build_bundle(std::move(saplingBuilder));
-        ASSERT_TRUE(maybeSaplingBundle.has_value());
-        auto saplingBundle = std::move(maybeSaplingBundle.value());
+        auto saplingBundle = sapling::build_bundle(std::move(saplingBuilder));
 
         auto dataToBeSigned = ProduceShieldedSignatureHash(
             CurrentEpochBranchId(nHeight, Params().GetConsensus()),
