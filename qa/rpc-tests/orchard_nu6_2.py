@@ -33,11 +33,11 @@ class OrchardNU6_2Test(BitcoinTestFramework):
     def network_upgrade_args(self):
         return [
             nuparams(BLOSSOM_BRANCH_ID, 1),
-            nuparams(HEARTWOOD_BRANCH_ID, 5),
-            nuparams(CANOPY_BRANCH_ID, 5),
-            nuparams(NU5_BRANCH_ID, 10),
-            nuparams(NU6_BRANCH_ID, 20),
-            nuparams(NU6_1_BRANCH_ID, 30),
+            nuparams(HEARTWOOD_BRANCH_ID, 1),
+            nuparams(CANOPY_BRANCH_ID, 1),
+            nuparams(NU5_BRANCH_ID, 1),
+            nuparams(NU6_BRANCH_ID, 1),
+            nuparams(NU6_1_BRANCH_ID, 1),
             nuparams(NU6_2_BRANCH_ID, 2),
         ]
 
