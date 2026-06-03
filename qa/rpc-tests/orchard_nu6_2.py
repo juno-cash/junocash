@@ -76,7 +76,7 @@ class OrchardNU6_2Test(BitcoinTestFramework):
         opid = node.z_sendmany(
             get_coinbase_address(node),
             [{"address": ua1, "amount": coinbase_amount}],
-            1, coinbase_fee, 'AllowRevealedSenders')
+            1, coinbase_fee)
         wait_and_assert_operationid_status(node, opid)
 
         node.generate(1)
