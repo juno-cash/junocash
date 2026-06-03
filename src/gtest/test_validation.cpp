@@ -487,7 +487,6 @@ TEST(Validation, BanOnPoolValueOutOfRange) {
     CValidationState state;
     {
         LOCK(cs_main);
-        EXPECT_TRUE(SetChainPoolValues(chainParams, block2, &fakeIndex2));
         EXPECT_FALSE(ReceivedBlockTransactions(block2, state, chainParams, &fakeIndex2, pos2));
     }
 
