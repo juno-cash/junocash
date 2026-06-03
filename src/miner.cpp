@@ -334,6 +334,11 @@ public:
 
 CMutableTransaction CreateCoinbaseTransaction(const CChainParams& chainparams, CAmount nFees, const MinerAddress& minerAddress, int nHeight)
 {
+        if (chainparams.GetConsensus().TemporaryOrchardDisablingSoftForkActive(nHeight) &&
+            IsShieldedMinerAddress(minerAddress)) {
+            throw std::runtime_error("Shielded miner addresses are disabled by the temporary Orchard soft fork; use a transparent miner address");
+        }
+
         CMutableTransaction mtx = CreateNewContextualCMutableTransaction(
                 chainparams.GetConsensus(), nHeight,
                 !std::holds_alternative<libzcash::OrchardRawAddress>(minerAddress) && nPreferredTxVersion < ZIP225_MIN_TX_VERSION);
@@ -794,6 +799,10 @@ std::optional<MinerAddress> ExtractMinerAddress::operator()(const libzcash::Sapl
     return addr;
 }
 std::optional<MinerAddress> ExtractMinerAddress::operator()(const libzcash::UnifiedAddress &addr) const {
+    if (consensus.TemporaryOrchardDisablingSoftForkActive(height)) {
+        return std::nullopt;
+    }
+
     auto preferred = addr.GetPreferredRecipientAddress(consensus, height);
     if (preferred.has_value()) {
         return examine(preferred.value(), match {
