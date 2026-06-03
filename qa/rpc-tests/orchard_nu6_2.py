@@ -17,6 +17,12 @@ from decimal import Decimal
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.mininode import COIN
 from test_framework.util import (
+    BLOSSOM_BRANCH_ID,
+    CANOPY_BRANCH_ID,
+    HEARTWOOD_BRANCH_ID,
+    NU5_BRANCH_ID,
+    NU6_BRANCH_ID,
+    NU6_1_BRANCH_ID,
     NU6_2_BRANCH_ID,
     assert_equal,
     get_coinbase_address,
@@ -30,15 +36,24 @@ from test_framework.zip317 import conventional_fee
 class OrchardNU6_2Test(BitcoinTestFramework):
     def __init__(self):
         super().__init__()
-        self.num_nodes = 4
+        self.num_nodes = 3
+        self.cache_behavior = 'clean'
 
     def setup_nodes(self):
         return start_nodes(self.num_nodes, self.options.tmpdir, extra_args=[[
-            nuparams(NU6_2_BRANCH_ID, 202),
+            nuparams(BLOSSOM_BRANCH_ID, 1),
+            nuparams(HEARTWOOD_BRANCH_ID, 5),
+            nuparams(CANOPY_BRANCH_ID, 5),
+            nuparams(NU5_BRANCH_ID, 10),
+            nuparams(NU6_BRANCH_ID, 20),
+            nuparams(NU6_1_BRANCH_ID, 30),
+            nuparams(NU6_2_BRANCH_ID, 105),
         ]] * self.num_nodes)
 
     def run_test(self):
-        assert_equal(self.nodes[0].getblockcount(), 200)
+        self.nodes[0].generate(103)
+        self.sync_all()
+        assert_equal(self.nodes[0].getblockcount(), 103)
 
         acct1 = self.nodes[1].z_getnewaccount()['account']
         ua1 = self.nodes[1].z_getaddressforaccount(acct1, ['orchard'])['address']
@@ -60,7 +75,7 @@ class OrchardNU6_2Test(BitcoinTestFramework):
         self.sync_all()
         self.nodes[0].generate(1)
         self.sync_all()
-        assert_equal(self.nodes[0].getblockcount(), 201)
+        assert_equal(self.nodes[0].getblockcount(), 104)
 
         assert_equal(
             {'pools': {'orchard': {'valueZat': coinbase_amount * COIN}}, 'minimum_confirmations': 1},
@@ -85,8 +100,7 @@ class OrchardNU6_2Test(BitcoinTestFramework):
         assert_equal(
             {'pools': {'orchard': {'valueZat': (coinbase_amount - spend_amount - spend_fee) * COIN}}, 'minimum_confirmations': 1},
             self.nodes[1].z_getbalanceforaccount(acct1))
-
-        assert_equal(self.nodes[0].getbestblockhash(), self.nodes[3].getbestblockhash())
+        assert_equal(self.nodes[0].getblockcount(), 105)
 
 
 if __name__ == '__main__':
