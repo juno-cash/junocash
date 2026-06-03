@@ -50,6 +50,10 @@ class OrchardNU6_2Test(BitcoinTestFramework):
                 self.network_upgrade_args(0, 0),
             ])
 
+    def setup_network(self):
+        self.nodes = self.setup_nodes()
+        self.is_network_split = False
+
     def run_test(self):
         pending = self.nodes[0].getblockchaininfo()
         assert_equal(pending['blocks'], 0)
