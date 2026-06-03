@@ -352,11 +352,15 @@ TEST(TransactionBuilder, OrchardPreNu6point2CircuitRejectedFromNU6point2) {
     auto consensusParams = RegtestActivateNU6point2(false, hardForkHeight);
     auto nu6point2BranchId = CurrentEpochBranchId(hardForkHeight, Params().GetConsensus());
 
-    CTransaction tx;
-    BuildOrchardSpend(tx, hardForkHeight, false);
+    CTransaction fixedCircuitTx;
+    BuildOrchardSpend(fixedCircuitTx, hardForkHeight);
+    EXPECT_TRUE(OrchardAuthorizationValidWithKey(fixedCircuitTx, nu6point2BranchId, true));
+    EXPECT_FALSE(OrchardAuthorizationValidWithKey(fixedCircuitTx, nu6point2BranchId, false));
 
-    EXPECT_FALSE(OrchardAuthorizationValidWithKey(tx, nu6point2BranchId, true));
-    EXPECT_TRUE(OrchardAuthorizationValidWithKey(tx, nu6point2BranchId, false));
+    CTransaction preNu6point2CircuitTx;
+    BuildOrchardSpend(preNu6point2CircuitTx, hardForkHeight, false);
+    EXPECT_FALSE(OrchardAuthorizationValidWithKey(preNu6point2CircuitTx, nu6point2BranchId, true));
+    EXPECT_TRUE(OrchardAuthorizationValidWithKey(preNu6point2CircuitTx, nu6point2BranchId, false));
 
     RegtestDeactivateNU6point2();
 }
