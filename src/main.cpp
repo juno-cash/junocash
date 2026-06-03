@@ -902,6 +902,7 @@ bool ContextualCheckTransaction(
     bool nu5Active = consensus.NetworkUpgradeActive(nHeight, Consensus::UPGRADE_NU5);
     bool nu6Active = consensus.NetworkUpgradeActive(nHeight, Consensus::UPGRADE_NU6);
     bool nu6point1Active = consensus.NetworkUpgradeActive(nHeight, Consensus::UPGRADE_NU6_1);
+    bool nu6point2Active = consensus.NetworkUpgradeActive(nHeight, Consensus::UPGRADE_NU6_2);
     bool futureActive = consensus.NetworkUpgradeActive(nHeight, Consensus::UPGRADE_ZFUTURE);
 
     assert(!saplingActive || overwinterActive); // Sapling cannot be active unless Overwinter is
@@ -910,7 +911,8 @@ bool ContextualCheckTransaction(
     assert(!nu5Active || canopyActive);         // NU5 cannot be active unless Canopy is
     assert(!nu6Active || nu5Active);            // NU6 cannot be active unless NU5 is
     assert(!nu6point1Active || nu6Active);      // NU6.1 cannot be active unless NU6 is
-    assert(!futureActive || nu6point1Active);   // ZFUTURE must include consensus rules for all supported network upgrades.
+    assert(!nu6point2Active || nu6point1Active); // NU6.2 cannot be active unless NU6.1 is
+    assert(!futureActive || nu6point2Active);   // ZFUTURE must include consensus rules for all supported network upgrades.
 
     auto& orchard_bundle = tx.GetOrchardBundle();
 
@@ -1332,12 +1334,18 @@ bool ContextualCheckTransaction(
         }
     }
 
-    // Soft fork: temporarily require transactions to not contain Orchard actions.
-    if (consensus.TemporaryOrchardDisablingSoftForkActive(nHeight) &&
-        orchard_bundle.IsPresent()) {
-        return state.Invalid(
-            error("ContextualCheckTransaction(): transaction has Orchard actions (temporarily disabled)"),
-            REJECT_INVALID, "bad-tx-has-orchard-actions");
+    // Rules that apply to NU6.2 or later:
+    if (nu6point2Active) {
+        // Orchard proof-size enforcement is in the Rust transaction parser.
+        // Orchard proof verification selects the fixed NU6.2 key in batch validation.
+    } else {
+        // Soft fork: temporarily require transactions to not contain Orchard actions.
+        if (consensus.TemporaryOrchardDisablingSoftForkActive(nHeight) &&
+            orchard_bundle.IsPresent()) {
+            return state.Invalid(
+                error("ContextualCheckTransaction(): transaction has Orchard actions (temporarily disabled)"),
+                REJECT_INVALID, "bad-tx-has-orchard-actions");
+        }
     }
 
     // Rules that apply to the future epoch
@@ -2114,7 +2122,9 @@ bool AcceptToMemoryPool(
 
         // This will be a single-transaction batch, which is still more efficient as every
         // Orchard bundle contains at least two signatures.
-        std::optional<rust::Box<orchard::BatchValidator>> orchardAuth = orchard::init_batch_validator(true);
+        std::optional<rust::Box<orchard::BatchValidator>> orchardAuth = orchard::init_batch_validator(
+            true,
+            chainparams.GetConsensus().NetworkUpgradeActive(nextBlockHeight, Consensus::UPGRADE_NU6_2));
 
         // Check shielded input signatures.
         if (!ContextualCheckShieldedInputs(
@@ -3231,7 +3241,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     std::optional<rust::Box<sapling::BatchValidator>> saplingAuth = fExpensiveChecks ?
         std::optional(sapling::init_batch_validator(fCacheResults)) : std::nullopt;
     std::optional<rust::Box<orchard::BatchValidator>> orchardAuth = fExpensiveChecks ?
-        std::optional(orchard::init_batch_validator(fCacheResults)) : std::nullopt;
+        std::optional(orchard::init_batch_validator(
+            fCacheResults,
+            consensusParams.NetworkUpgradeActive(pindex->nHeight, Consensus::UPGRADE_NU6_2)))
+        : std::nullopt;
 
     // If in initial block download, and this block is an ancestor of a checkpoint,
     // and -ibdskiptxverification is set, disable all transaction checks.

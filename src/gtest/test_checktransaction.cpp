@@ -1390,7 +1390,7 @@ TEST(ChecktransactionTests, InvalidOrchardShieldedCoinbase) {
         .GetChangeAddress();
     mtx.vin.resize(1);
     mtx.vin[0].prevout.SetNull();
-    auto builder = orchard::Builder(true, uint256());
+    auto builder = orchard::Builder(true, uint256(), false);
     builder.AddOutput(std::nullopt, to, 0, std::nullopt);
     mtx.orchardBundle = builder
         .Build().value()
@@ -1419,7 +1419,7 @@ TEST(ChecktransactionTests, NU5AcceptsOrchardShieldedCoinbase) {
     auto chainparams = Params();
 
     uint256 orchardAnchor;
-    auto builder = orchard::Builder(true, orchardAnchor);
+    auto builder = orchard::Builder(true, orchardAnchor, false);
 
     // Shielded coinbase outputs must be recoverable with an all-zeroes ovk.
     RawHDSeed rawSeed(32, 0);
@@ -1541,7 +1541,7 @@ TEST(ChecktransactionTests, NU5EnforcesOrchardRulesOnShieldedCoinbase) {
     auto chainparams = Params();
 
     uint256 orchardAnchor;
-    auto builder = orchard::Builder(true, orchardAnchor);
+    auto builder = orchard::Builder(true, orchardAnchor, false);
 
     // Shielded coinbase outputs must be recoverable with an all-zeroes ovk.
     RawHDSeed rawSeed(32, 0);

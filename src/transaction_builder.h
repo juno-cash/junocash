@@ -91,7 +91,7 @@ private:
     Builder() : inner(nullptr, orchard_builder_free), hasActions(false) { }
 
 public:
-    Builder(bool coinbase, uint256 anchor);
+    Builder(bool coinbase, uint256 anchor, bool useFixedCircuitForProving);
 
     // Builder should never be copied
     Builder(const Builder&) = delete;

@@ -137,6 +137,9 @@ void CTransaction::UpdateHash() const
 {
     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
     ss << *this;
+    // CONSENSUS: this reparses the serialized transaction through librustzcash, which
+    // enforces consensus encoding rules, including the canonical Orchard proof size from
+    // NU6.2 keyed on the transaction's own v5+ consensus branch id.
     if (!zcash_transaction_digests(
         reinterpret_cast<const unsigned char*>(ss.data()),
         ss.size(),

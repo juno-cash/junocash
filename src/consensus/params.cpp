@@ -107,7 +107,8 @@ namespace Consensus {
     bool Params::TemporaryOrchardDisablingSoftForkActive(int nHeight) const {
         return
             nTemporaryOrchardDisablingSoftForkHeight != Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT &&
-            nHeight >= nTemporaryOrchardDisablingSoftForkHeight;
+            nHeight >= nTemporaryOrchardDisablingSoftForkHeight &&
+            !NetworkUpgradeActive(nHeight, Consensus::UPGRADE_NU6_2);
     }
 
     int Params::Halving(int nHeight) const {

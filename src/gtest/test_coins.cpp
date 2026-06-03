@@ -454,7 +454,7 @@ public:
             .GetChangeAddress();
         uint256 orchardAnchor;
         uint256 dataToBeSigned;
-        auto builder = orchard::Builder(false, orchardAnchor);
+        auto builder = orchard::Builder(false, orchardAnchor, false);
         builder.AddOutput(std::nullopt, to, 0, std::nullopt);
         mutableTxV5.orchardBundle = builder.Build().value().ProveAndSign({}, dataToBeSigned).value();
         orchardNullifier = mutableTxV5.orchardBundle.GetNullifiers().at(0);

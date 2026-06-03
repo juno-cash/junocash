@@ -278,6 +278,7 @@ TEST(TransactionBuilder, TemporaryOrchardDisablingSoftFork)
 {
     RegtestActivateNU5();
     const int freezeHeight = 100;
+    const int hardForkHeight = 110;
     UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(freezeHeight);
 
     CBasicKeyStore keystore;
@@ -308,6 +309,18 @@ TEST(TransactionBuilder, TemporaryOrchardDisablingSoftFork)
     EXPECT_FALSE(ContextualCheckTransaction(tx, atFreezeState, Params(), freezeHeight, true));
     EXPECT_EQ(atFreezeState.GetRejectReason(), "bad-tx-has-orchard-actions");
 
+    RegtestActivateNU6point2(false, hardForkHeight);
+    UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(freezeHeight);
+    auto hardForkBuilder = TransactionBuilder(Params(), hardForkHeight, orchardAnchor, SaplingMerkleTree::empty_root(), &keystore);
+    hardForkBuilder.AddTransparentInput(COutPoint(uint256S("5678"), 0), scriptPubKey, 5000);
+    hardForkBuilder.AddOrchardOutput(std::nullopt, recipient, 4000, std::nullopt);
+    auto hardForkTx = hardForkBuilder.Build().GetTxOrThrow();
+    ASSERT_TRUE(hardForkTx.GetOrchardBundle().IsPresent());
+
+    CValidationState hardForkState;
+    EXPECT_TRUE(ContextualCheckTransaction(hardForkTx, hardForkState, Params(), hardForkHeight, true));
+    EXPECT_EQ(hardForkState.GetRejectReason(), "");
+
     auto coinbaseMtx = CreateNewContextualCMutableTransaction(Params().GetConsensus(), freezeHeight, false);
     coinbaseMtx.vin.resize(1);
     coinbaseMtx.vin[0].prevout.SetNull();
@@ -324,8 +337,7 @@ TEST(TransactionBuilder, TemporaryOrchardDisablingSoftFork)
     EXPECT_TRUE(ContextualCheckTransaction(coinbaseTx, coinbaseState, Params(), freezeHeight, true));
     EXPECT_EQ(coinbaseState.GetRejectReason(), "");
 
-    UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT);
-    RegtestDeactivateNU5();
+    RegtestDeactivateNU6point2();
 }
 
 TEST(TransactionBuilder, ThrowsOnTransparentInputWithoutKeyStore)

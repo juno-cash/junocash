@@ -1,12 +1,14 @@
 use std::{mem, ptr};
 
+use group::{Group as _, GroupEncoding as _};
 use memuse::DynamicUsage;
 use orchard::{
-    bundle::Authorized,
+    bundle::{Authorized, ProofSizeEnforcement},
     keys::OutgoingViewingKey,
     note_encryption::OrchardDomain,
     primitives::redpallas::{Signature, SpendAuth},
 };
+use pasta_curves::pallas;
 use zcash_note_encryption::try_output_recovery_with_ovk;
 use zcash_primitives::transaction::components::orchard as orchard_serialization;
 use zcash_protocol::value::ZatBalance;
@@ -84,7 +86,7 @@ impl Bundle {
 
     /// Parses an authorized Orchard bundle from the given stream.
     pub(crate) fn parse(reader: &mut CppStream<'_>) -> Result<Box<Self>, String> {
-        match orchard_serialization::read_v5_bundle(reader) {
+        match orchard_serialization::read_v5_bundle(reader, ProofSizeEnforcement::Unenforced) {
             Ok(parsed) => Ok(Box::new(Bundle(parsed))),
             Err(e) => Err(format!("Failed to parse Orchard bundle: {}", e)),
         }
@@ -214,7 +216,11 @@ impl Bundle {
                 if rk_bytes == [0u8; 32] {
                     return false;
                 }
-                if action.encrypted_note().epk_bytes == [0u8; 32] {
+                if pallas::Point::from_bytes(&action.encrypted_note().epk_bytes)
+                    .into_option()
+                    .into_iter()
+                    .all(|p| p.is_identity().into())
+                {
                     return false;
                 }
             }

@@ -46,6 +46,18 @@ class CChainParams: public KeyConstants
 {
 public:
     const Consensus::Params& GetConsensus() const { return consensus; }
+
+    /// Whether wallets, miners, and local transaction builders should use the fixed
+    /// Orchard circuit rather than the historical one.
+    ///
+    /// On testnet and regtest, this follows NU6.2 activation so tests can reconstruct
+    /// pre-NU6.2 Orchard history. On mainnet, the emergency soft fork has already
+    /// activated before this hard fork, so new local proofs always use the fixed circuit.
+    bool UseFixedCircuitForProving(int nHeight) const {
+        return NetworkIDString() == CBaseChainParams::MAIN ||
+               GetConsensus().NetworkUpgradeActive(nHeight, Consensus::UPGRADE_NU6_2);
+    }
+
     const rust::Box<consensus::Network> RustNetwork() const {
         return consensus::network(
             NetworkIDString(),
@@ -56,7 +68,8 @@ public:
             consensus.vUpgrades[Consensus::UPGRADE_CANOPY].nActivationHeight,
             consensus.vUpgrades[Consensus::UPGRADE_NU5].nActivationHeight,
             consensus.vUpgrades[Consensus::UPGRADE_NU6].nActivationHeight,
-            consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nActivationHeight);
+            consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nActivationHeight,
+            consensus.vUpgrades[Consensus::UPGRADE_NU6_2].nActivationHeight);
     }
     const CMessageHeader::MessageStartChars& MessageStart() const { return pchMessageStart; }
     int GetDefaultPort() const { return nDefaultPort; }

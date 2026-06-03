@@ -8,6 +8,7 @@ use orchard::keys::SpendingKey;
 use orchard::{
     builder::{Builder, BundleType, InProgress, Unauthorized, Unproven},
     bundle::Authorized,
+    circuit::OrchardCircuitVersion,
     keys::{FullViewingKey, OutgoingViewingKey},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
@@ -15,22 +16,26 @@ use orchard::{
 };
 use rand_core::OsRng;
 use tracing::error;
-use zcash_primitives::{
-    consensus::BranchId,
-    transaction::{
-        sighash::{signature_hash, SignableInput},
-        txid::TxIdDigester,
-        Authorization, Transaction, TransactionData,
-    },
+use zcash_primitives::transaction::{
+    sighash::{signature_hash, SignableInput},
+    txid::TxIdDigester,
+    Authorization, Transaction, TransactionData,
 };
-use zcash_protocol::memo::MemoBytes;
-use zcash_protocol::value::ZatBalance;
+use zcash_protocol::{consensus::BranchId, memo::MemoBytes, value::ZatBalance};
 
 use crate::{
     bridge::ffi::OrchardUnauthorizedBundlePtr,
     transaction_ffi::{MapTransparent, TransparentAuth},
-    ORCHARD_PK,
+    ORCHARD_PK, ORCHARD_PK_INSECURE,
 };
+
+fn circuit_version_for(use_fixed_circuit_for_proving: bool) -> OrchardCircuitVersion {
+    if use_fixed_circuit_for_proving {
+        OrchardCircuitVersion::FixedPostNu6_2
+    } else {
+        OrchardCircuitVersion::InsecurePreNu6_2
+    }
+}
 
 pub struct OrchardSpendInfo {
     fvk: FullViewingKey,
@@ -56,7 +61,11 @@ pub extern "C" fn orchard_spend_info_free(spend_info: *mut OrchardSpendInfo) {
 }
 
 #[no_mangle]
-pub extern "C" fn orchard_builder_new(coinbase: bool, anchor: *const [u8; 32]) -> *mut Builder {
+pub extern "C" fn orchard_builder_new(
+    coinbase: bool,
+    anchor: *const [u8; 32],
+    use_fixed_circuit_for_proving: bool,
+) -> *mut Builder {
     let bundle_type = if coinbase {
         BundleType::Coinbase
     } else {
@@ -65,7 +74,11 @@ pub extern "C" fn orchard_builder_new(coinbase: bool, anchor: *const [u8; 32]) -
     let anchor = unsafe { anchor.as_ref() }
         .map(|a| orchard::Anchor::from_bytes(*a).unwrap())
         .unwrap_or_else(|| MerkleHashOrchard::empty_root(32.into()).into());
-    Box::into_raw(Box::new(Builder::new(bundle_type, anchor)))
+    Box::into_raw(Box::new(Builder::new_for_version(
+        bundle_type,
+        anchor,
+        circuit_version_for(use_fixed_circuit_for_proving),
+    )))
 }
 
 #[no_mangle]
@@ -171,9 +184,6 @@ pub extern "C" fn orchard_unauthorized_bundle_prove_and_sign(
     let bundle = unsafe { Box::from_raw(bundle) };
     let keys = unsafe { slice::from_raw_parts(keys, keys_len) };
     let sighash = unsafe { sighash.as_ref() }.expect("sighash pointer may not be null.");
-    let pk = unsafe { ORCHARD_PK.as_ref() }
-        .expect("Parameters not loaded: ORCHARD_PK should have been initialized");
-
     let signing_keys = keys
         .iter()
         .map(|sk| {
@@ -184,9 +194,18 @@ pub extern "C" fn orchard_unauthorized_bundle_prove_and_sign(
         .collect::<Vec<_>>();
 
     let mut rng = OsRng;
-    let res = bundle
-        .create_proof(pk, &mut rng)
-        .and_then(|b| b.apply_signatures(rng, *sighash, &signing_keys));
+    let proof = match bundle.circuit_version() {
+        OrchardCircuitVersion::FixedPostNu6_2 => bundle.create_proof(
+            ORCHARD_PK
+                .get()
+                .expect("Parameters not loaded: ORCHARD_PK should have been initialized"),
+            &mut rng,
+        ),
+        OrchardCircuitVersion::InsecurePreNu6_2 => {
+            bundle.create_proof(&ORCHARD_PK_INSECURE, &mut rng)
+        }
+    };
+    let res = proof.and_then(|b| b.apply_signatures(rng, *sighash, &signing_keys));
 
     match res {
         Ok(signed) => Box::into_raw(Box::new(signed)),

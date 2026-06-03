@@ -11,15 +11,25 @@ use crate::{
 struct BatchValidatorInner {
     validator: orchard::bundle::BatchValidator,
     queued_entries: CacheEntries,
+    vk: &'static orchard::circuit::VerifyingKey,
 }
 
 pub(crate) struct BatchValidator(Option<BatchValidatorInner>);
 
 /// Creates an Orchard bundle batch validation context.
-pub(crate) fn orchard_batch_validation_init(cache_store: bool) -> Box<BatchValidator> {
+pub(crate) fn orchard_batch_validation_init(
+    cache_store: bool,
+    nu6_2_active: bool,
+) -> Box<BatchValidator> {
+    let vk: &'static orchard::circuit::VerifyingKey = if nu6_2_active {
+        &crate::ORCHARD_VK_FIXED
+    } else {
+        &crate::ORCHARD_VK_INSECURE
+    };
     Box::new(BatchValidator(Some(BatchValidatorInner {
         validator: orchard::bundle::BatchValidator::new(),
         queued_entries: CacheEntries::new(cache_store),
+        vk,
     })))
 }
 
@@ -78,9 +88,7 @@ impl BatchValidator {
     /// - `bindingSigOrchard` validity is enforced here.
     pub(crate) fn validate(&mut self) -> bool {
         if let Some(inner) = self.0.take() {
-            let vk = unsafe { crate::ORCHARD_VK.as_ref() }
-                .expect("Parameters not loaded: ORCHARD_VK should have been initialized");
-            if inner.validator.validate(vk, OsRng) {
+            if inner.validator.validate(inner.vk, OsRng) {
                 // `BatchValidator::validate()` is only called if every
                 // `BatchValidator::check_bundle()` returned `true`, so at this point
                 // every bundle that was added to `inner.queued_entries` has valid

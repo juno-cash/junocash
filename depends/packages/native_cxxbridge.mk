@@ -1,14 +1,14 @@
 package=native_cxxbridge
 # The version needs to match cxx in Cargo.toml
-$(package)_version=1.0.160
+$(package)_version=1.0.194
 $(package)_download_path=https://github.com/dtolnay/cxx/archive/refs/tags
 $(package)_file_name=native_cxxbridge-$($(package)_version).tar.gz
 $(package)_download_file=$($(package)_version).tar.gz
-$(package)_sha256_hash=90542b9569fd237f345839f687b20f1f1da827774d2dab05d3638cbe73da0748
+$(package)_sha256_hash=2edf94915ab43778b02a13e522d050a76dea607d1a05f769911775676d27cb3c
 $(package)_build_subdir=gen/cmd
 $(package)_dependencies=native_rust
 # This file is somewhat annoying to update, but can be done like so from the repo base:
-# $ export VERSION=1.0.160
+# $ export VERSION=1.0.194
 # $ rm .cargo/config.toml .cargo/.configured-for-offline
 # $ mkdir tmp
 # $ cd tmp
@@ -35,14 +35,10 @@ endef
 define $(package)_preprocess_cmds
   cp $($(package)_patch_dir)/Cargo.lock . && \
   mkdir -p .cargo && \
-  echo "[source.crates-io]" >.cargo/config.toml && \
-  echo "replace-with = \"vendored-sources\"" >>.cargo/config.toml && \
-  echo "[source.vendored-sources]" >>.cargo/config.toml && \
-  echo "directory = \"$(CRATE_REGISTRY)\"" >>.cargo/config.toml && \
-  echo "[target.aarch64-apple-darwin]" >>.cargo/config.toml && \
-  echo 'linker = "clang"' >>.cargo/config.toml && \
-  echo "[target.x86_64-apple-darwin]" >>.cargo/config.toml && \
-  echo 'linker = "clang"' >>.cargo/config.toml
+  echo "[source.crates-io]" >.cargo/config && \
+  echo "replace-with = \"vendored-sources\"" >>.cargo/config && \
+  echo "[source.vendored-sources]" >>.cargo/config && \
+  echo "directory = \"$(CRATE_REGISTRY)\"" >>.cargo/config
 endef
 
 define $(package)_build_cmds

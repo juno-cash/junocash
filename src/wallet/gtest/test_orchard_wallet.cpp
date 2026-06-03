@@ -1,6 +1,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "consensus/upgrades.h"
 #include "consensus/validation.h"
 #include "gtest/utils.h"
 #include "random.h"
@@ -9,6 +10,7 @@
 #include "wallet/orchard.h"
 #include "zcash/Address.hpp"
 
+#include <ios>
 #include <optional>
 
 using namespace libzcash;
@@ -73,6 +75,99 @@ TEST(OrchardWalletTests, TxInvolvesMyNotes) {
     EXPECT_FALSE(wallet.TxInvolvesMyNotes(tx2.GetHash()));
 
     RegtestDeactivateNU5();
+}
+
+void BuildOrchardSpend(CTransaction& outTx) {
+    OrchardWallet wallet;
+    auto sk = RandomOrchardSpendingKey();
+    wallet.AddSpendingKey(sk);
+
+    libzcash::diversifier_index_t j(0);
+    auto txRecv = FakeOrchardTx(sk, j);
+    wallet.AddNotesIfInvolvingMe(txRecv);
+
+    auto recipient = RandomOrchardSpendingKey()
+        .ToFullViewingKey()
+        .ToIncomingViewingKey()
+        .Address(j);
+
+    std::vector<OrchardNoteMetadata> notes;
+    wallet.GetFilteredNotes(
+        notes, sk.ToFullViewingKey().ToIncomingViewingKey(), true, true);
+    ASSERT_EQ(notes.size(), 1);
+    ASSERT_THROW(wallet.GetSpendInfo(notes, 1, wallet.GetLatestAnchor()), std::logic_error);
+
+    CBlock fakeBlock;
+    fakeBlock.vtx.resize(2);
+    fakeBlock.vtx[1] = txRecv;
+    ASSERT_TRUE(wallet.AppendNoteCommitments(2, fakeBlock));
+
+    auto spendInfo = wallet.GetSpendInfo(notes, 1, wallet.GetLatestAnchor());
+    ASSERT_EQ(spendInfo[0].second.Value(), 40000);
+
+    OrchardMerkleFrontier tree;
+    tree.AppendBundle(txRecv.GetOrchardBundle());
+
+    auto builder = TransactionBuilder(Params(), 2, tree.root(), SaplingMerkleTree::empty_root());
+    ASSERT_TRUE(builder.AddOrchardSpend(sk, std::move(spendInfo[0].second)));
+    builder.AddOrchardOutput(std::nullopt, recipient, 25000, std::nullopt);
+    auto maybeTx = builder.Build();
+    ASSERT_TRUE(maybeTx.IsTx());
+
+    auto tx = maybeTx.GetTxOrThrow();
+    ASSERT_EQ(tx.vin.size(), 0);
+    ASSERT_EQ(tx.vout.size(), 0);
+    ASSERT_EQ(tx.vJoinSplit.size(), 0);
+    ASSERT_EQ(tx.GetSaplingSpendsCount(), 0);
+    ASSERT_EQ(tx.GetSaplingOutputsCount(), 0);
+    ASSERT_TRUE(tx.GetOrchardBundle().IsPresent());
+    ASSERT_EQ(tx.GetOrchardBundle().GetValueBalance(), 1000);
+    outTx = tx;
+}
+
+void MakeOrchardProofNonCanonicalBytes(const CTransaction& tx, std::vector<unsigned char>& outBytes) {
+    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+    ss << tx;
+    std::vector<unsigned char> bytes(ss.begin(), ss.end());
+
+    size_t pos = 4 + 4 + 4 + 4 + 4;
+    for (int i = 0; i < 4; i++) {
+        ASSERT_EQ(bytes[pos], 0);
+        pos += 1;
+    }
+
+    size_t nActions = bytes[pos];
+    ASSERT_GT(nActions, 0u);
+    ASSERT_LT(nActions, 253u);
+    pos += 1 + nActions * 820;
+    pos += 1 + 8 + 32;
+
+    ASSERT_EQ(bytes[pos], 0xfd);
+    size_t proofLen = bytes[pos + 1] | (bytes[pos + 2] << 8);
+    size_t newProofLen = proofLen + 1;
+    ASSERT_LT(newProofLen, 0x10000u);
+    bytes[pos + 1] = newProofLen & 0xff;
+    bytes[pos + 2] = (newProofLen >> 8) & 0xff;
+    bytes.insert(bytes.begin() + pos + 3, 0);
+
+    outBytes = bytes;
+}
+
+void SetConsensusBranchId(std::vector<unsigned char>& bytes, uint32_t branchId) {
+    for (int i = 0; i < 4; i++) {
+        bytes[8 + i] = (branchId >> (8 * i)) & 0xff;
+    }
+}
+
+bool TryDeserializeTx(const std::vector<unsigned char>& bytes) {
+    CDataStream ss(bytes, SER_NETWORK, PROTOCOL_VERSION);
+    try {
+        CTransaction tx;
+        ss >> tx;
+        return true;
+    } catch (const std::ios_base::failure&) {
+        return false;
+    }
 }
 
 // This test is here instead of test_transaction_builder.cpp because it depends
@@ -154,4 +249,42 @@ TEST(TransactionBuilder, OrchardToOrchard) {
 
     // Revert to default
     RegtestDeactivateNU5();
+}
+
+TEST(TransactionBuilder, OrchardNonCanonicalProofSizeRejectedFromNU6point2) {
+    LoadProofParameters();
+
+    auto consensusParams = RegtestActivateNU6point2(false, 1);
+    CTransaction tx;
+    BuildOrchardSpend(tx);
+
+    {
+        CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+        ss << tx;
+        std::vector<unsigned char> bytes(ss.begin(), ss.end());
+        EXPECT_TRUE(TryDeserializeTx(bytes));
+    }
+
+    std::vector<unsigned char> tampered;
+    ASSERT_NO_FATAL_FAILURE(MakeOrchardProofNonCanonicalBytes(tx, tampered));
+    EXPECT_FALSE(TryDeserializeTx(tampered));
+
+    RegtestDeactivateNU6point2();
+}
+
+TEST(TransactionBuilder, OrchardNonCanonicalProofSizeAllowedBeforeNU6point2) {
+    LoadProofParameters();
+
+    auto consensusParams = RegtestActivateNU6point2(false, 1);
+    CTransaction tx;
+    BuildOrchardSpend(tx);
+
+    std::vector<unsigned char> tampered;
+    ASSERT_NO_FATAL_FAILURE(MakeOrchardProofNonCanonicalBytes(tx, tampered));
+    ASSERT_FALSE(TryDeserializeTx(tampered));
+
+    SetConsensusBranchId(tampered, NetworkUpgradeInfo[Consensus::UPGRADE_NU6_1].nBranchId);
+    EXPECT_TRUE(TryDeserializeTx(tampered));
+
+    RegtestDeactivateNU6point2();
 }

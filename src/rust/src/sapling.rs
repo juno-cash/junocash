@@ -24,7 +24,6 @@ use sapling::{
     SaplingVerificationContext,
 };
 use zcash_primitives::{
-    memo::MemoBytes,
     merkle_tree::merkle_path_from_slice,
     transaction::{
         components::sapling as sapling_serialization,
@@ -32,7 +31,7 @@ use zcash_primitives::{
         Authorized, Transaction, TransactionDigest,
     },
 };
-use zcash_protocol::value::ZatBalance;
+use zcash_protocol::{memo::MemoBytes, value::ZatBalance};
 
 use super::GROTH_PROOF_SIZE;
 use super::{
@@ -336,7 +335,8 @@ impl SpendProver for StaticTxProver {
     }
 
     fn create_proof<R: RngCore>(&self, circuit: circuit::Spend, rng: &mut R) -> Self::Proof {
-        unsafe { SAPLING_SPEND_PARAMS.as_ref() }
+        SAPLING_SPEND_PARAMS
+            .get()
             .expect("Parameters not loaded: SAPLING_SPEND_PARAMS should have been initialized")
             .create_proof(circuit, rng)
     }
@@ -360,7 +360,8 @@ impl OutputProver for StaticTxProver {
     }
 
     fn create_proof<R: RngCore>(&self, circuit: circuit::Output, rng: &mut R) -> Self::Proof {
-        unsafe { SAPLING_OUTPUT_PARAMS.as_ref() }
+        SAPLING_OUTPUT_PARAMS
+            .get()
             .expect("Parameters not loaded: SAPLING_OUTPUT_PARAMS should have been initialized")
             .create_proof(circuit, rng)
     }
@@ -565,7 +566,8 @@ impl Verifier {
             sighash_value,
             spend_auth_sig,
             zkproof,
-            &unsafe { SAPLING_SPEND_VK.as_ref() }
+            &SAPLING_SPEND_VK
+                .get()
                 .expect("Parameters not loaded: SAPLING_SPEND_VK should have been initialized")
                 .prepare(),
         )
@@ -607,7 +609,8 @@ impl Verifier {
             cmu,
             epk,
             zkproof,
-            &unsafe { SAPLING_OUTPUT_VK.as_ref() }
+            &SAPLING_OUTPUT_VK
+                .get()
                 .expect("Parameters not loaded: SAPLING_OUTPUT_VK should have been initialized")
                 .prepare(),
         )
@@ -717,8 +720,8 @@ impl BatchValidator {
             // Juno Cash: Sapling is banned at consensus level, so parameters may not be loaded.
             // If parameters are not loaded, this should only be called with an empty validator.
             // Return true for empty validator (no bundles to validate).
-            let spend_vk = unsafe { SAPLING_SPEND_VK.as_ref() };
-            let output_vk = unsafe { SAPLING_OUTPUT_VK.as_ref() };
+            let spend_vk = SAPLING_SPEND_VK.get();
+            let output_vk = SAPLING_OUTPUT_VK.get();
 
             if spend_vk.is_none() || output_vk.is_none() {
                 // Parameters not loaded (Sapling banned). This should only happen with

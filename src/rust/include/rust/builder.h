@@ -36,7 +36,8 @@ void orchard_spend_info_free(OrchardSpendInfoPtr* ptr);
 /// If `anchor` is `null`, the root of the empty Orchard commitment tree is used.
 OrchardBuilderPtr* orchard_builder_new(
     bool coinbase,
-    const unsigned char* anchor);
+    const unsigned char* anchor,
+    bool use_fixed_circuit_for_proving);
 
 /// Frees an Orchard builder returned from `orchard_builder_new`.
 void orchard_builder_free(OrchardBuilderPtr* ptr);

@@ -2,7 +2,7 @@ use std::sync::Once;
 
 use tracing::info;
 
-use crate::{ORCHARD_PK, ORCHARD_VK};
+use crate::{ORCHARD_PK, ORCHARD_VK_FIXED, ORCHARD_VK_INSECURE};
 
 #[cxx::bridge]
 mod ffi {
@@ -36,14 +36,10 @@ fn zksnark_params(_sprout_path: String, load_proving_keys: bool) {
 
         // Generate Orchard parameters.
         info!(target: "main", "Loading Orchard parameters");
-        let orchard_pk = load_proving_keys.then(orchard::circuit::ProvingKey::build);
-        let orchard_vk = orchard::circuit::VerifyingKey::build();
-
-        // Caller is responsible for calling this function once, so
-        // these global mutations are safe.
-        unsafe {
-            ORCHARD_PK = orchard_pk;
-            ORCHARD_VK = Some(orchard_vk);
+        if load_proving_keys {
+            ORCHARD_PK.get_or_init(orchard::circuit::ProvingKey::build);
         }
+        std::sync::LazyLock::force(&ORCHARD_VK_INSECURE);
+        std::sync::LazyLock::force(&ORCHARD_VK_FIXED);
     });
 }

@@ -49,9 +49,11 @@ namespace orchard {
 
 Builder::Builder(
     bool coinbase,
-    uint256 anchor) : inner(nullptr, orchard_builder_free)
+    uint256 anchor,
+    bool useFixedCircuitForProving) : inner(nullptr, orchard_builder_free)
 {
-    inner.reset(orchard_builder_new(coinbase, anchor.IsNull() ? nullptr : anchor.begin()));
+    inner.reset(orchard_builder_new(
+        coinbase, anchor.IsNull() ? nullptr : anchor.begin(), useFixedCircuitForProving));
 }
 
 bool Builder::AddSpend(orchard::SpendInfo spendInfo)
@@ -227,7 +229,8 @@ TransactionBuilder::TransactionBuilder(
 
     // Ignore the Orchard anchor if we can't use it yet.
     if (orchardAnchor.has_value() && mtx.nVersion >= ZIP225_MIN_TX_VERSION) {
-        orchardBuilder = orchard::Builder(false, orchardAnchor.value());
+        orchardBuilder = orchard::Builder(
+            false, orchardAnchor.value(), params.UseFixedCircuitForProving(nHeight));
     }
 }
 
@@ -576,6 +579,7 @@ TransactionBuilderResult TransactionBuilder::Build()
     }
 
     if (orchardBundle.has_value()) {
+        // The bundle proves against the circuit version its builder was created with.
         auto authorizedBundle = orchardBundle.value().ProveAndSign(
             orchardSpendingKeys, dataToBeSigned);
         if (authorizedBundle.has_value()) {

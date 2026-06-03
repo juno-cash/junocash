@@ -309,7 +309,7 @@ public:
         // TODO: With the new BundleType::DEFAULT this is no longer true. Fix this.
         uint256 orchardAnchor;
         uint256 dataToBeSigned;
-        auto builder = orchard::Builder(false, orchardAnchor);
+        auto builder = orchard::Builder(false, orchardAnchor, false);
         mutableTx.orchardBundle = builder.Build().value().ProveAndSign({}, dataToBeSigned).value();
         orchardNullifier = mutableTx.orchardBundle.GetNullifiers()[0];
 
@@ -341,7 +341,7 @@ template<> void AppendRandomLeaf(OrchardMerkleFrontier &tree) {
     // append a random leaf to OrchardMerkleFrontier.
     uint256 orchardAnchor;
     uint256 dataToBeSigned;
-    auto builder = orchard::Builder(false, orchardAnchor);
+    auto builder = orchard::Builder(false, orchardAnchor, false);
     auto bundle = builder.Build().value().ProveAndSign({}, dataToBeSigned).value();
     tree.AppendBundle(bundle);
 }

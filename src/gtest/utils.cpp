@@ -86,7 +86,7 @@ template<> void AppendRandomLeaf(OrchardMerkleFrontier &tree) {
     uint256 orchardAnchor;
     uint256 dataToBeSigned;
     // TODO: Create bundle.
-    auto builder = orchard::Builder(false, orchardAnchor);
+    auto builder = orchard::Builder(false, orchardAnchor, false);
     builder.AddOutput(std::nullopt, to, 0, std::nullopt);
     auto bundle = builder.Build().value().ProveAndSign({}, dataToBeSigned).value();
     tree.AppendBundle(bundle);
