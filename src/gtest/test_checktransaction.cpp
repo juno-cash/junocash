@@ -1446,7 +1446,7 @@ TEST(ChecktransactionTests, NU5AcceptsOrchardShieldedCoinbase) {
     mtx.fOverwintered = true;
     mtx.nVersionGroupId = ZIP225_VERSION_GROUP_ID;
     mtx.nVersion = ZIP225_TX_VERSION;
-    mtx.nConsensusBranchId = NetworkUpgradeInfo[Consensus::UPGRADE_NU5].nBranchId;
+    mtx.nConsensusBranchId = CurrentEpochBranchId(10, chainparams.GetConsensus());
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout.SetNull();
@@ -1568,7 +1568,7 @@ TEST(ChecktransactionTests, NU5EnforcesOrchardRulesOnShieldedCoinbase) {
     mtx.fOverwintered = true;
     mtx.nVersionGroupId = ZIP225_VERSION_GROUP_ID;
     mtx.nVersion = ZIP225_TX_VERSION;
-    mtx.nConsensusBranchId = NetworkUpgradeInfo[Consensus::UPGRADE_NU5].nBranchId;
+    mtx.nConsensusBranchId = CurrentEpochBranchId(10, chainparams.GetConsensus());
 
     mtx.vin.resize(1);
     mtx.vin[0].prevout.SetNull();

@@ -153,7 +153,7 @@ void BuildOrchardSpend(CTransaction& outTx, int nHeight = 2, std::optional<bool>
     ASSERT_EQ(tx.GetSaplingSpendsCount(), 0);
     ASSERT_EQ(tx.GetSaplingOutputsCount(), 0);
     ASSERT_TRUE(tx.GetOrchardBundle().IsPresent());
-    ASSERT_EQ(tx.GetOrchardBundle().GetValueBalance(), 1000);
+    ASSERT_EQ(tx.GetOrchardBundle().GetValueBalance(), useFixedCircuitForProving.has_value() ? 15000 : 1000);
     outTx = tx;
 }
 
@@ -355,8 +355,8 @@ TEST(TransactionBuilder, OrchardPreNu6point2CircuitRejectedFromNU6point2) {
     CTransaction tx;
     BuildOrchardSpend(tx, hardForkHeight, false);
 
-    EXPECT_TRUE(OrchardAuthorizationValidWithKey(tx, nu6point2BranchId, false));
     EXPECT_FALSE(OrchardAuthorizationValidWithKey(tx, nu6point2BranchId, true));
+    EXPECT_TRUE(OrchardAuthorizationValidWithKey(tx, nu6point2BranchId, false));
 
     RegtestDeactivateNU6point2();
 }
