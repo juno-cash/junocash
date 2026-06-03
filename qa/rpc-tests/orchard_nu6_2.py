@@ -27,51 +27,41 @@ def branch_id(branch_id_int):
 class OrchardNU6_2Test(BitcoinTestFramework):
     def __init__(self):
         super().__init__()
-        self.num_nodes = 1
+        self.num_nodes = 2
         self.cache_behavior = 'clean'
 
-    def network_upgrade_args(self):
+    def network_upgrade_args(self, predecessor_height, nu6_2_height):
         return [
-            '-mineraddress=tmGqwWtL7RsbxikDSN26gsbicxVr2xJNe86',
-            '-minetolocalwallet=0',
-            nuparams(BLOSSOM_BRANCH_ID, 1),
-            nuparams(HEARTWOOD_BRANCH_ID, 1),
-            nuparams(CANOPY_BRANCH_ID, 1),
-            nuparams(NU5_BRANCH_ID, 1),
-            nuparams(NU6_BRANCH_ID, 1),
-            nuparams(NU6_1_BRANCH_ID, 1),
-            nuparams(NU6_2_BRANCH_ID, 2),
+            nuparams(BLOSSOM_BRANCH_ID, predecessor_height),
+            nuparams(HEARTWOOD_BRANCH_ID, predecessor_height),
+            nuparams(CANOPY_BRANCH_ID, predecessor_height),
+            nuparams(NU5_BRANCH_ID, predecessor_height),
+            nuparams(NU6_BRANCH_ID, predecessor_height),
+            nuparams(NU6_1_BRANCH_ID, predecessor_height),
+            nuparams(NU6_2_BRANCH_ID, nu6_2_height),
         ]
 
     def setup_nodes(self):
         return start_nodes(
             self.num_nodes,
             self.options.tmpdir,
-            extra_args=[self.network_upgrade_args()] * self.num_nodes)
+            extra_args=[
+                self.network_upgrade_args(1, 2),
+                self.network_upgrade_args(0, 0),
+            ])
 
     def run_test(self):
-        node = self.nodes[0]
+        pending = self.nodes[0].getblockchaininfo()
+        assert_equal(pending['blocks'], 0)
+        assert_equal(pending['upgrades'][branch_id(NU6_2_BRANCH_ID)]['status'], 'pending')
+        assert_equal(pending['consensus']['chaintip'], '00000000')
+        assert_equal(pending['consensus']['nextblock'], branch_id(NU6_1_BRANCH_ID))
 
-        info = node.getblockchaininfo()
-        assert_equal(info['blocks'], 0)
-        assert_equal(info['upgrades'][branch_id(NU6_2_BRANCH_ID)]['status'], 'pending')
-        assert_equal(info['consensus']['chaintip'], '00000000')
-        assert_equal(info['consensus']['nextblock'], branch_id(NU6_1_BRANCH_ID))
-
-        node.generate(1)
-        info = node.getblockchaininfo()
-        assert_equal(info['blocks'], 1)
-        assert_equal(info['upgrades'][branch_id(NU6_2_BRANCH_ID)]['status'], 'pending')
-        assert_equal(info['consensus']['chaintip'], branch_id(NU6_1_BRANCH_ID))
-        assert_equal(info['consensus']['nextblock'], branch_id(NU6_2_BRANCH_ID))
-
-        print("Activating NU6.2")
-        node.generate(1)
-        info = node.getblockchaininfo()
-        assert_equal(info['blocks'], 2)
-        assert_equal(info['upgrades'][branch_id(NU6_2_BRANCH_ID)]['status'], 'active')
-        assert_equal(info['consensus']['chaintip'], branch_id(NU6_2_BRANCH_ID))
-        assert_equal(info['consensus']['nextblock'], branch_id(NU6_2_BRANCH_ID))
+        active = self.nodes[1].getblockchaininfo()
+        assert_equal(active['blocks'], 0)
+        assert_equal(active['upgrades'][branch_id(NU6_2_BRANCH_ID)]['status'], 'active')
+        assert_equal(active['consensus']['chaintip'], branch_id(NU6_2_BRANCH_ID))
+        assert_equal(active['consensus']['nextblock'], branch_id(NU6_2_BRANCH_ID))
 
 
 if __name__ == '__main__':
