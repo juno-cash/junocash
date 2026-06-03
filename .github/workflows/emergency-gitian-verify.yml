@@ -1,0 +1,113 @@
+name: Emergency Gitian Verify
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/orchard-freeze-softfork
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  native-tests:
+    name: Native build and tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            bsdmainutils \
+            build-essential \
+            curl \
+            git \
+            libtool \
+            pkg-config \
+            python3 \
+            python3-pip \
+            ruby
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build depends
+        run: make -C depends HOST=x86_64-pc-linux-gnu -j"$(nproc)"
+
+      - name: Configure
+        run: |
+          ./autogen.sh
+          CONFIG_SITE="$PWD/depends/x86_64-pc-linux-gnu/share/config.site" \
+            ./configure --enable-werror
+
+      - name: Build
+        run: make -j"$(nproc)"
+
+      - name: Run make check
+        run: make check
+
+      - name: Run focused Orchard freeze gtests
+        run: |
+          if [ -x src/zcash-gtest ]; then
+            src/zcash-gtest --gtest_filter='Miner.TemporaryOrchardFreezeRequiresTransparentCoinbase:TransactionBuilder.TemporaryOrchardDisablingSoftFork'
+          else
+            echo "src/zcash-gtest not found after build" >&2
+            exit 1
+          fi
+
+  gitian-linux:
+    name: Gitian Linux release build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 720
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            build-essential \
+            curl \
+            git \
+            libtool \
+            pkg-config \
+            python3 \
+            ruby
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Show Docker environment
+        run: |
+          docker version
+          docker info
+
+      - name: Build Gitian Linux release
+        run: ./zcutil/build-release.sh --linux -g --tag "$GITHUB_SHA" --jobs "$(nproc)"
+
+      - name: Upload release artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitian-linux-release
+          path: |
+            release/**
+          if-no-files-found: warn
