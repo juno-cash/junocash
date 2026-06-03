@@ -32,6 +32,8 @@ class OrchardNU6_2Test(BitcoinTestFramework):
 
     def network_upgrade_args(self):
         return [
+            '-mineraddress=tmGqwWtL7RsbxikDSN26gsbicxVr2xJNe86',
+            '-minetolocalwallet=0',
             nuparams(BLOSSOM_BRANCH_ID, 1),
             nuparams(HEARTWOOD_BRANCH_ID, 1),
             nuparams(CANOPY_BRANCH_ID, 1),
