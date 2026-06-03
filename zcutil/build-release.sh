@@ -393,6 +393,14 @@ build_gitian_linux() {
             export DOCKER_IMAGE_HASH="$DEBIAN_BULLSEYE_DIGEST"
             bin/make-base-vm --distro debian --suite bullseye --arch amd64 --docker
         fi
+        print_info "Removing apt-cacher proxy from Gitian Docker base image..."
+        cat > Dockerfile.noaptproxy <<'EOF'
+FROM base-bullseye-amd64
+RUN rm -f /etc/apt/apt.conf.d/50cacher
+EOF
+        docker build -f Dockerfile.noaptproxy -t base-bullseye-amd64-noaptproxy .
+        docker tag base-bullseye-amd64-noaptproxy base-bullseye-amd64
+        rm -f Dockerfile.noaptproxy
     fi
 
     # Set reference datetime for reproducibility
