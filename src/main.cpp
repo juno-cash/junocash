@@ -3799,22 +3799,6 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     }
     blockundo.old_sprout_tree_root = old_sprout_tree_root;
 
-    // Validate the Sapling and Orchard binding signatures before the chain
-    // supply consistency check. The binding signatures enforce that each
-    // shielded bundle's value balance is consistent with its inputs and
-    // outputs; checking them first keeps malformed accounting out of the fatal
-    // consistency path.
-    if (saplingAuth.has_value() && !saplingAuth.value()->validate()) {
-        return state.DoS(100,
-            error("%s: a Sapling bundle within the block is invalid", __func__),
-            REJECT_INVALID, "bad-sapling-bundle-authorization");
-    }
-    if (orchardAuth.has_value() && !orchardAuth.value()->validate()) {
-        return state.DoS(100,
-            error("%s: an Orchard bundle within the block is invalid", __func__),
-            REJECT_INVALID, "bad-orchard-bundle-authorization");
-    }
-
     if (consensusParams.NetworkUpgradeActive(pindex->nHeight, Consensus::UPGRADE_NU5)) {
         if (fCheckAuthDataRoot) {
             // If NU5 is active, block.hashBlockCommitments must be the top digest
@@ -3912,6 +3896,22 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 cbTotalInputValue - pindex->nLockboxValue,
                 pindex->nLockboxValue),
             REJECT_INVALID, "bad-cb-not-exact");
+    }
+
+    // Validate the Sapling and Orchard binding signatures before the chain
+    // supply consistency check. The binding signatures enforce that each
+    // shielded bundle's value balance is consistent with its inputs and
+    // outputs; checking them first keeps malformed accounting out of the fatal
+    // consistency path.
+    if (saplingAuth.has_value() && !saplingAuth.value()->validate()) {
+        return state.DoS(100,
+            error("%s: a Sapling bundle within the block is invalid", __func__),
+            REJECT_INVALID, "bad-sapling-bundle-authorization");
+    }
+    if (orchardAuth.has_value() && !orchardAuth.value()->validate()) {
+        return state.DoS(100,
+            error("%s: an Orchard bundle within the block is invalid", __func__),
+            REJECT_INVALID, "bad-orchard-bundle-authorization");
     }
 
     // Ensure that the total chain supply is consistent with the value in each pool.
