@@ -25,9 +25,11 @@ from test_framework.util import (
     NU6_1_BRANCH_ID,
     NU6_2_BRANCH_ID,
     assert_equal,
-    get_coinbase_address,
+    connect_nodes_bi,
     nuparams,
+    start_node,
     start_nodes,
+    stop_node,
     wait_and_assert_operationid_status,
 )
 from test_framework.zip317 import conventional_fee
@@ -39,22 +41,24 @@ class OrchardNU6_2Test(BitcoinTestFramework):
         self.num_nodes = 3
         self.cache_behavior = 'clean'
 
-    def setup_nodes(self):
-        return start_nodes(self.num_nodes, self.options.tmpdir, extra_args=[[
+    def network_upgrade_args(self):
+        return [
             nuparams(BLOSSOM_BRANCH_ID, 1),
-            nuparams(HEARTWOOD_BRANCH_ID, 5),
-            nuparams(CANOPY_BRANCH_ID, 5),
-            nuparams(NU5_BRANCH_ID, 10),
-            nuparams(NU6_BRANCH_ID, 20),
-            nuparams(NU6_1_BRANCH_ID, 30),
-            nuparams(NU6_2_BRANCH_ID, 105),
-        ]] * self.num_nodes)
+            nuparams(HEARTWOOD_BRANCH_ID, 1),
+            nuparams(CANOPY_BRANCH_ID, 1),
+            nuparams(NU5_BRANCH_ID, 2),
+            nuparams(NU6_BRANCH_ID, 3),
+            nuparams(NU6_1_BRANCH_ID, 4),
+            nuparams(NU6_2_BRANCH_ID, 5),
+        ]
+
+    def setup_nodes(self):
+        return start_nodes(
+            self.num_nodes,
+            self.options.tmpdir,
+            extra_args=[self.network_upgrade_args()] * self.num_nodes)
 
     def run_test(self):
-        self.nodes[0].generate(103)
-        self.sync_all()
-        assert_equal(self.nodes[0].getblockcount(), 103)
-
         acct1 = self.nodes[1].z_getnewaccount()['account']
         ua1 = self.nodes[1].z_getaddressforaccount(acct1, ['orchard'])['address']
         assert_equal(
@@ -64,22 +68,28 @@ class OrchardNU6_2Test(BitcoinTestFramework):
         acct2 = self.nodes[2].z_getnewaccount()['account']
         ua2 = self.nodes[2].z_getaddressforaccount(acct2, ['orchard'])['address']
 
-        coinbase_fee = conventional_fee(3)
-        coinbase_amount = Decimal('10') - coinbase_fee
-        opid = self.nodes[0].z_sendmany(
-            get_coinbase_address(self.nodes[0]),
-            [{"address": ua1, "amount": coinbase_amount}],
-            1, coinbase_fee, 'AllowRevealedSenders')
-        wait_and_assert_operationid_status(self.nodes[0], opid)
+        stop_node(self.nodes[1], 1)
+        self.nodes[1] = start_node(
+            1,
+            self.options.tmpdir,
+            self.network_upgrade_args() + ["-mineraddress=%s" % ua1])
+        connect_nodes_bi(self.nodes, 0, 1)
+        connect_nodes_bi(self.nodes, 1, 2)
 
+        self.nodes[0].generate(3)
         self.sync_all()
-        self.nodes[0].generate(1)
-        self.sync_all()
-        assert_equal(self.nodes[0].getblockcount(), 104)
+        assert_equal(self.nodes[0].getblockcount(), 3)
 
+        self.nodes[1].generate(1)
+        self.sync_all()
+        assert_equal(self.nodes[0].getblockcount(), 4)
+
+        acct1_balance = self.nodes[1].z_getbalanceforaccount(acct1)
+        coinbase_zats = acct1_balance['pools']['orchard']['valueZat']
+        assert coinbase_zats > 0
         assert_equal(
-            {'pools': {'orchard': {'valueZat': coinbase_amount * COIN}}, 'minimum_confirmations': 1},
-            self.nodes[1].z_getbalanceforaccount(acct1))
+            {'pools': {'orchard': {'valueZat': coinbase_zats}}, 'minimum_confirmations': 1},
+            acct1_balance)
 
         spend_fee = conventional_fee(2)
         spend_amount = Decimal('1')
@@ -98,9 +108,9 @@ class OrchardNU6_2Test(BitcoinTestFramework):
             {'pools': {'orchard': {'valueZat': spend_amount * COIN}}, 'minimum_confirmations': 1},
             self.nodes[2].z_getbalanceforaccount(acct2))
         assert_equal(
-            {'pools': {'orchard': {'valueZat': (coinbase_amount - spend_amount - spend_fee) * COIN}}, 'minimum_confirmations': 1},
+            {'pools': {'orchard': {'valueZat': coinbase_zats - ((spend_amount + spend_fee) * COIN)}}, 'minimum_confirmations': 1},
             self.nodes[1].z_getbalanceforaccount(acct1))
-        assert_equal(self.nodes[0].getblockcount(), 105)
+        assert_equal(self.nodes[0].getblockcount(), 5)
 
 
 if __name__ == '__main__':
