@@ -50,12 +50,10 @@ public:
     /// Whether wallets, miners, and local transaction builders should use the fixed
     /// Orchard circuit rather than the historical one.
     ///
-    /// On testnet and regtest, this follows NU6.2 activation so tests can reconstruct
-    /// pre-NU6.2 Orchard history. On mainnet, the emergency soft fork has already
-    /// activated before this hard fork, so new local proofs always use the fixed circuit.
+    /// This follows NU6.2 activation so locally built proofs match the transaction
+    /// branch id and the verifier key used by consensus at the target height.
     bool UseFixedCircuitForProving(int nHeight) const {
-        return NetworkIDString() == CBaseChainParams::MAIN ||
-               GetConsensus().NetworkUpgradeActive(nHeight, Consensus::UPGRADE_NU6_2);
+        return GetConsensus().NetworkUpgradeActive(nHeight, Consensus::UPGRADE_NU6_2);
     }
 
     const rust::Box<consensus::Network> RustNetwork() const {

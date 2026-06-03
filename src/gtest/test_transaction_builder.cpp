@@ -340,6 +340,23 @@ TEST(TransactionBuilder, TemporaryOrchardDisablingSoftFork)
     RegtestDeactivateNU6point2();
 }
 
+TEST(TransactionBuilder, OrchardProvingCircuitTracksNU6point2Activation)
+{
+    SelectParams(CBaseChainParams::MAIN);
+    const int mainnetNu6point2Height =
+        Params().GetConsensus().vUpgrades[Consensus::UPGRADE_NU6_2].nActivationHeight;
+    ASSERT_NE(mainnetNu6point2Height, Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT);
+    EXPECT_FALSE(Params().UseFixedCircuitForProving(mainnetNu6point2Height - 1));
+    EXPECT_TRUE(Params().UseFixedCircuitForProving(mainnetNu6point2Height));
+
+    const int regtestNu6point2Height = 110;
+    RegtestActivateNU6point2(false, regtestNu6point2Height);
+    EXPECT_FALSE(Params().UseFixedCircuitForProving(regtestNu6point2Height - 1));
+    EXPECT_TRUE(Params().UseFixedCircuitForProving(regtestNu6point2Height));
+
+    RegtestDeactivateNU6point2();
+}
+
 TEST(TransactionBuilder, ThrowsOnTransparentInputWithoutKeyStore)
 {
     SelectParams(CBaseChainParams::REGTEST);
