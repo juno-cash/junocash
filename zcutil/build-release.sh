@@ -396,7 +396,10 @@ build_gitian_linux() {
         print_info "Removing apt-cacher proxy from Gitian Docker base image..."
         cat > Dockerfile.noaptproxy <<'EOF'
 FROM base-bullseye-amd64
+USER root
 RUN rm -f /etc/apt/apt.conf.d/50cacher
+USER debian:debian
+WORKDIR /home/debian
 EOF
         docker build -f Dockerfile.noaptproxy -t base-bullseye-amd64-noaptproxy .
         docker tag base-bullseye-amd64-noaptproxy base-bullseye-amd64
