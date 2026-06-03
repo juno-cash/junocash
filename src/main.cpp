@@ -5115,7 +5115,11 @@ static bool AccumulateChainPoolValues(CBlockIndex *pindex)
         if (!MoneyRange(chainSproutValue) || !MoneyDeltaRange(pindex->nSproutValue.value())) {
             return error("%s: sprout pool value out of range at height %d", __func__, pindex->nHeight);
         }
-        pindex->nChainSproutValue = chainSproutValue + pindex->nSproutValue.value();
+        chainSproutValue += pindex->nSproutValue.value();
+        if (!MoneyRange(chainSproutValue)) {
+            return error("%s: sprout chain pool value out of range at height %d", __func__, pindex->nHeight);
+        }
+        pindex->nChainSproutValue = chainSproutValue;
     } else {
         pindex->nChainSproutValue = std::nullopt;
     }
@@ -5126,7 +5130,11 @@ static bool AccumulateChainPoolValues(CBlockIndex *pindex)
         if (!MoneyRange(chainSaplingValue) || !MoneyDeltaRange(pindex->nSaplingValue)) {
             return error("%s: sapling pool value out of range at height %d", __func__, pindex->nHeight);
         }
-        pindex->nChainSaplingValue = chainSaplingValue + pindex->nSaplingValue;
+        chainSaplingValue += pindex->nSaplingValue;
+        if (!MoneyRange(chainSaplingValue)) {
+            return error("%s: sapling chain pool value out of range at height %d", __func__, pindex->nHeight);
+        }
+        pindex->nChainSaplingValue = chainSaplingValue;
     } else {
         pindex->nChainSaplingValue = std::nullopt;
     }
@@ -5137,7 +5145,11 @@ static bool AccumulateChainPoolValues(CBlockIndex *pindex)
         if (!MoneyRange(chainOrchardValue) || !MoneyDeltaRange(pindex->nOrchardValue)) {
             return error("%s: orchard pool value out of range at height %d", __func__, pindex->nHeight);
         }
-        pindex->nChainOrchardValue = chainOrchardValue + pindex->nOrchardValue;
+        chainOrchardValue += pindex->nOrchardValue;
+        if (!MoneyRange(chainOrchardValue)) {
+            return error("%s: orchard chain pool value out of range at height %d", __func__, pindex->nHeight);
+        }
+        pindex->nChainOrchardValue = chainOrchardValue;
     } else {
         pindex->nChainOrchardValue = std::nullopt;
     }
@@ -5148,7 +5160,11 @@ static bool AccumulateChainPoolValues(CBlockIndex *pindex)
         if (!MoneyRange(chainLockboxValue) || !MoneyDeltaRange(pindex->nLockboxValue)) {
             return error("%s: lockbox pool value out of range at height %d", __func__, pindex->nHeight);
         }
-        pindex->nChainLockboxValue = chainLockboxValue + pindex->nLockboxValue;
+        chainLockboxValue += pindex->nLockboxValue;
+        if (!MoneyRange(chainLockboxValue)) {
+            return error("%s: lockbox chain pool value out of range at height %d", __func__, pindex->nHeight);
+        }
+        pindex->nChainLockboxValue = chainLockboxValue;
     } else {
         pindex->nChainLockboxValue = std::nullopt;
     }

@@ -4,7 +4,9 @@
 #include "consensus/upgrades.h"
 #include "consensus/validation.h"
 #include "gtest/utils.h"
+#include "main.h"
 #include "random.h"
+#include "test/test_util.h"
 #include "transaction_builder.h"
 #include "util/test.h"
 #include "wallet/orchard.h"
@@ -77,7 +79,7 @@ TEST(OrchardWalletTests, TxInvolvesMyNotes) {
     RegtestDeactivateNU5();
 }
 
-void BuildOrchardSpend(CTransaction& outTx) {
+void BuildOrchardSpend(CTransaction& outTx, int nHeight = 2, std::optional<bool> useFixedCircuitForProving = std::nullopt) {
     OrchardWallet wallet;
     auto sk = RandomOrchardSpendingKey();
     wallet.AddSpendingKey(sk);
@@ -108,13 +110,45 @@ void BuildOrchardSpend(CTransaction& outTx) {
     OrchardMerkleFrontier tree;
     tree.AppendBundle(txRecv.GetOrchardBundle());
 
-    auto builder = TransactionBuilder(Params(), 2, tree.root(), SaplingMerkleTree::empty_root());
-    ASSERT_TRUE(builder.AddOrchardSpend(sk, std::move(spendInfo[0].second)));
-    builder.AddOrchardOutput(std::nullopt, recipient, 25000, std::nullopt);
-    auto maybeTx = builder.Build();
-    ASSERT_TRUE(maybeTx.IsTx());
+    CTransaction tx;
+    if (useFixedCircuitForProving.has_value()) {
+        auto orchardBuilder = orchard::Builder(false, tree.root(), useFixedCircuitForProving.value());
+        ASSERT_TRUE(orchardBuilder.AddSpend(std::move(spendInfo[0].second)));
+        orchardBuilder.AddOutput(std::nullopt, recipient, 25000, std::nullopt);
+        auto orchardBundle = orchardBuilder.Build();
+        ASSERT_TRUE(orchardBundle.has_value());
 
-    auto tx = maybeTx.GetTxOrThrow();
+        CMutableTransaction mtx = CreateNewContextualCMutableTransaction(
+            Params().GetConsensus(), nHeight, false);
+
+        auto saplingBuilder = sapling::new_builder(
+            *Params().RustNetwork(),
+            nHeight,
+            SaplingMerkleTree::empty_root().ToRawBytes(),
+            false);
+        auto maybeSaplingBundle = sapling::build_bundle(std::move(saplingBuilder));
+        ASSERT_TRUE(maybeSaplingBundle.has_value());
+        auto saplingBundle = std::move(maybeSaplingBundle.value());
+
+        auto dataToBeSigned = ProduceShieldedSignatureHash(
+            CurrentEpochBranchId(nHeight, Params().GetConsensus()),
+            mtx,
+            {},
+            *saplingBundle,
+            orchardBundle);
+        auto authorizedBundle = orchardBundle.value().ProveAndSign({sk}, dataToBeSigned);
+        ASSERT_TRUE(authorizedBundle.has_value());
+        mtx.orchardBundle = authorizedBundle.value();
+        tx = CTransaction(mtx);
+    } else {
+        auto builder = TransactionBuilder(Params(), nHeight, tree.root(), SaplingMerkleTree::empty_root());
+        ASSERT_TRUE(builder.AddOrchardSpend(sk, std::move(spendInfo[0].second)));
+        builder.AddOrchardOutput(std::nullopt, recipient, 25000, std::nullopt);
+        auto maybeTx = builder.Build();
+        ASSERT_TRUE(maybeTx.IsTx());
+        tx = maybeTx.GetTxOrThrow();
+    }
+
     ASSERT_EQ(tx.vin.size(), 0);
     ASSERT_EQ(tx.vout.size(), 0);
     ASSERT_EQ(tx.vJoinSplit.size(), 0);
@@ -168,6 +202,30 @@ bool TryDeserializeTx(const std::vector<unsigned char>& bytes) {
     } catch (const std::ios_base::failure&) {
         return false;
     }
+}
+
+bool OrchardAuthorizationValidWithKey(const CTransaction& tx, uint32_t consensusBranchId, bool nu6point2Active) {
+    const PrecomputedTransactionData txdata(tx, {});
+    CValidationState state;
+    AssumeShieldedInputsExistAndAreSpendable baseView;
+    CCoinsViewCache view(&baseView);
+    std::optional<rust::Box<sapling::BatchValidator>> saplingAuth = sapling::init_batch_validator(false);
+    std::optional<rust::Box<orchard::BatchValidator>> orchardAuth =
+        orchard::init_batch_validator(false, nu6point2Active);
+
+    EXPECT_TRUE(ContextualCheckShieldedInputs(
+        tx,
+        txdata,
+        state,
+        view,
+        saplingAuth,
+        orchardAuth,
+        Params().GetConsensus(),
+        consensusBranchId,
+        true,
+        true));
+    EXPECT_EQ(state.GetRejectReason(), "");
+    return orchardAuth.value()->validate();
 }
 
 // This test is here instead of test_transaction_builder.cpp because it depends
@@ -285,6 +343,22 @@ TEST(TransactionBuilder, OrchardNonCanonicalProofSizeAllowedBeforeNU6point2) {
 
     SetConsensusBranchId(tampered, NetworkUpgradeInfo[Consensus::UPGRADE_NU6_1].nBranchId);
     EXPECT_TRUE(TryDeserializeTx(tampered));
+
+    RegtestDeactivateNU6point2();
+}
+
+TEST(TransactionBuilder, OrchardPreNu6point2CircuitRejectedFromNU6point2) {
+    LoadProofParameters();
+
+    const int hardForkHeight = 3;
+    auto consensusParams = RegtestActivateNU6point2(false, hardForkHeight);
+    auto nu6point2BranchId = CurrentEpochBranchId(hardForkHeight, Params().GetConsensus());
+
+    CTransaction tx;
+    BuildOrchardSpend(tx, hardForkHeight, false);
+
+    EXPECT_TRUE(OrchardAuthorizationValidWithKey(tx, nu6point2BranchId, false));
+    EXPECT_FALSE(OrchardAuthorizationValidWithKey(tx, nu6point2BranchId, true));
 
     RegtestDeactivateNU6point2();
 }

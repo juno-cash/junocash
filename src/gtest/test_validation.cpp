@@ -463,6 +463,14 @@ TEST(Validation, BanOnPoolValueOutOfRange) {
     block1.vtx.push_back(GetValidSproutReceive(sk, 5, true));
     block1.hashMerkleRoot = BlockMerkleRoot(block1);
     CBlockIndex fakeIndex1 {block1};
+    fakeIndex1.nSproutValue = 5;
+    fakeIndex1.nSaplingValue = 0;
+    fakeIndex1.nOrchardValue = 0;
+    fakeIndex1.nLockboxValue = 0;
+    fakeIndex1.nChainSproutValue = 5;
+    fakeIndex1.nChainSaplingValue = 0;
+    fakeIndex1.nChainOrchardValue = 0;
+    fakeIndex1.nChainLockboxValue = 0;
 
     CBlock block2;
     block2.hashPrevBlock = block1.GetHash();
@@ -479,7 +487,7 @@ TEST(Validation, BanOnPoolValueOutOfRange) {
     CValidationState state;
     {
         LOCK(cs_main);
-        EXPECT_FALSE(SetChainPoolValues(chainParams, block2, &fakeIndex2));
+        EXPECT_TRUE(SetChainPoolValues(chainParams, block2, &fakeIndex2));
         EXPECT_FALSE(ReceivedBlockTransactions(block2, state, chainParams, &fakeIndex2, pos2));
     }
 
