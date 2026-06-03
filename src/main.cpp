@@ -1830,6 +1830,20 @@ bool CheckTransactionWithoutProofVerification(const CTransaction& tx, CValidatio
             return state.DoS(100, error("CheckTransaction(): coinbase has enableSpendsOrchard set"),
                              REJECT_INVALID, "bad-cb-has-orchard-spend");
 
+        // A coinbase transaction has no Sapling spends or spend-enabled Orchard
+        // actions (rejected above), so its shielded value balance is the negation
+        // of the value of its shielded outputs and cannot be positive. A positive
+        // value balance would be unsatisfiable by the binding signature, hence
+        // always invalid. Rejecting it here prevents malformed coinbase
+        // transactions from reaching chain supply consistency checks with
+        // inconsistent pool accounting.
+        if (tx.GetValueBalanceSapling() > 0)
+            return state.DoS(100, error("CheckTransaction(): coinbase has positive Sapling value balance"),
+                             REJECT_INVALID, "bad-cb-positive-sapling-valuebalance");
+        if (orchard_bundle.GetValueBalance() > 0)
+            return state.DoS(100, error("CheckTransaction(): coinbase has positive Orchard value balance"),
+                             REJECT_INVALID, "bad-cb-positive-orchard-valuebalance");
+
         if (tx.vin[0].scriptSig.size() < 2 || tx.vin[0].scriptSig.size() > 100)
             return state.DoS(100, false, REJECT_INVALID, "bad-cb-length");
     }
@@ -3785,6 +3799,22 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     }
     blockundo.old_sprout_tree_root = old_sprout_tree_root;
 
+    // Validate the Sapling and Orchard binding signatures before the chain
+    // supply consistency check. The binding signatures enforce that each
+    // shielded bundle's value balance is consistent with its inputs and
+    // outputs; checking them first keeps malformed accounting out of the fatal
+    // consistency path.
+    if (saplingAuth.has_value() && !saplingAuth.value()->validate()) {
+        return state.DoS(100,
+            error("%s: a Sapling bundle within the block is invalid", __func__),
+            REJECT_INVALID, "bad-sapling-bundle-authorization");
+    }
+    if (orchardAuth.has_value() && !orchardAuth.value()->validate()) {
+        return state.DoS(100,
+            error("%s: an Orchard bundle within the block is invalid", __func__),
+            REJECT_INVALID, "bad-orchard-bundle-authorization");
+    }
+
     if (consensusParams.NetworkUpgradeActive(pindex->nHeight, Consensus::UPGRADE_NU5)) {
         if (fCheckAuthDataRoot) {
             // If NU5 is active, block.hashBlockCommitments must be the top digest
@@ -3917,19 +3947,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         }
     }
 
-    // Ensure Sapling authorizations are valid (if we are checking them)
-    if (saplingAuth.has_value() && !saplingAuth.value()->validate()) {
-        return state.DoS(100,
-            error("%s: a Sapling bundle within the block is invalid", __func__),
-            REJECT_INVALID, "bad-sapling-bundle-authorization");
-    }
-
-    // Ensure Orchard signatures are valid (if we are checking them)
-    if (orchardAuth.has_value() && !orchardAuth.value()->validate()) {
-        return state.DoS(100,
-            error("%s: an Orchard bundle within the block is invalid", __func__),
-            REJECT_INVALID, "bad-orchard-bundle-authorization");
-    }
+    // Sapling and Orchard bundle authorizations are validated earlier, before
+    // the chain supply consistency check.
 
     if (!control.Wait())
         return state.DoS(100, false);
@@ -5398,7 +5417,9 @@ bool ReceivedBlockTransactions(
     // disk, so pool values are never set on rejected or duplicate blocks.
     // (Backport of Zcash commit 15a797672.)
     if (!SetChainPoolValues(chainparams, block, pindexNew)) {
-        return error("ReceivedBlockTransactions(): SetChainPoolValues failed");
+        return state.DoS(100,
+            error("ReceivedBlockTransactions(): SetChainPoolValues failed"),
+            REJECT_INVALID, "bad-blk-pool-value-out-of-range");
     }
 
     pindexNew->nTx = block.vtx.size();
@@ -5436,7 +5457,12 @@ bool ReceivedBlockTransactions(
             // block reception can defer the parent's chain values becoming
             // available until after `SetChainPoolValues` was called.
             if (!AccumulateChainPoolValues(pindex)) {
-                return error("ReceivedBlockTransactions(): AccumulateChainPoolValues failed at height %d", pindex->nHeight);
+                error("ReceivedBlockTransactions(): AccumulateChainPoolValues failed at height %d", pindex->nHeight);
+                if (pindex == pindexNew) {
+                    return state.DoS(100, false, REJECT_INVALID,
+                        "bad-blk-pool-value-out-of-range");
+                }
+                return false;
             }
 
             // Fall back to hardcoded Sprout value pool balance

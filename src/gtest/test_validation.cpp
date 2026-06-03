@@ -453,3 +453,43 @@ TEST(Validation, ReceivedBlockTransactions) {
     EnsureUnreferencedAsKeyOfMapBlocksUnlinked(&fakeIndex1);
     EnsureUnreferencedAsKeyOfMapBlocksUnlinked(&fakeIndex2);
 }
+
+TEST(Validation, BanOnPoolValueOutOfRange) {
+    SelectParams(CBaseChainParams::REGTEST);
+    const auto chainParams = Params();
+    const auto sk = libzcash::SproutSpendingKey::random();
+
+    CBlock block1;
+    block1.vtx.push_back(GetValidSproutReceive(sk, 5, true));
+    block1.hashMerkleRoot = BlockMerkleRoot(block1);
+    CBlockIndex fakeIndex1 {block1};
+
+    CBlock block2;
+    block2.hashPrevBlock = block1.GetHash();
+    block2.vtx.push_back(GetValidSproutReceive(sk, MAX_MONEY / 2, true));
+    block2.vtx.push_back(GetValidSproutReceive(sk, MAX_MONEY / 2, true));
+    block2.hashMerkleRoot = BlockMerkleRoot(block2);
+    CBlockIndex fakeIndex2 {block2};
+    fakeIndex2.pprev = &fakeIndex1;
+
+    ASSERT_TRUE(fakeIndex1.RaiseValidity(BLOCK_VALID_TREE));
+    ASSERT_TRUE(fakeIndex2.RaiseValidity(BLOCK_VALID_TREE));
+
+    CDiskBlockPos pos2;
+    CValidationState state;
+    {
+        LOCK(cs_main);
+        EXPECT_FALSE(SetChainPoolValues(chainParams, block2, &fakeIndex2));
+        EXPECT_FALSE(ReceivedBlockTransactions(block2, state, chainParams, &fakeIndex2, pos2));
+    }
+
+    int nDoS = 0;
+    EXPECT_TRUE(state.IsInvalid(nDoS));
+    EXPECT_EQ(100, nDoS);
+    EXPECT_EQ("bad-blk-pool-value-out-of-range", state.GetRejectReason());
+    EXPECT_FALSE(fakeIndex2.IsValid(BLOCK_VALID_TRANSACTIONS));
+    EXPECT_FALSE(fakeIndex2.nStatus & BLOCK_HAVE_DATA);
+
+    EnsureUnreferencedAsKeyOfMapBlocksUnlinked(&fakeIndex1);
+    EnsureUnreferencedAsKeyOfMapBlocksUnlinked(&fakeIndex2);
+}

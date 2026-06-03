@@ -1629,6 +1629,19 @@ TEST(ChecktransactionTests, NU5EnforcesOrchardRulesOnShieldedCoinbase) {
         // EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-txns-valuebalance-toolarge", false, "")).Times(1);
         // EXPECT_FALSE(CheckTransactionWithoutProofVerification(tx, state));
     }
+    {
+        std::vector<char> txBytes(ss.begin(), ss.end());
+        uint64_t valueBalanceBad = htole64(1);
+        std::copy((char*)&valueBalanceBad, (char*)&valueBalanceBad + 8, txBytes.data() + ORCHARD_BUNDLE_VALUEBALANCE_OFFSET);
+
+        CDataStream ssBad(txBytes, SER_DISK, PROTOCOL_VERSION);
+        CTransaction tx;
+        ssBad >> tx;
+
+        MockCValidationState state;
+        EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-cb-positive-orchard-valuebalance", false, "")).Times(1);
+        EXPECT_FALSE(CheckTransactionWithoutProofVerification(tx, state));
+    }
 
     // Test the success case.
     {
@@ -1642,4 +1655,23 @@ TEST(ChecktransactionTests, NU5EnforcesOrchardRulesOnShieldedCoinbase) {
     }
 
     RegtestDeactivateNU5();
+}
+
+TEST(ChecktransactionTests, CoinbaseRejectsPositiveSaplingValueBalance) {
+    CMutableTransaction mtx;
+    mtx.fOverwintered = true;
+    mtx.nVersionGroupId = ZIP225_VERSION_GROUP_ID;
+    mtx.nVersion = ZIP225_TX_VERSION;
+    mtx.nConsensusBranchId = NetworkUpgradeInfo[Consensus::UPGRADE_NU5].nBranchId;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout.SetNull();
+    mtx.vin[0].scriptSig << 123;
+    mtx.saplingBundle = sapling::test_only_invalid_bundle(0, 1, 1);
+
+    UNSAFE_CTransaction tx(mtx);
+    ASSERT_TRUE(tx.IsCoinBase());
+
+    MockCValidationState state;
+    EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-cb-positive-sapling-valuebalance", false, "")).Times(1);
+    EXPECT_FALSE(CheckTransactionWithoutProofVerification(tx, state));
 }
