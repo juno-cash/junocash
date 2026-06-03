@@ -173,6 +173,11 @@ void SelectParams(const std::string& chain);
  */
 void UpdateNetworkUpgradeParameters(Consensus::UpgradeIndex idx, int nActivationHeight);
 
+/**
+ * Allows modifying the temporary Orchard-disabling soft fork height (regtest only).
+ */
+void UpdateTemporaryOrchardDisablingSoftForkHeight(int nHeight);
+
 void UpdateRegtestPow(
     int64_t nPowMaxAdjustDown,
     int64_t nPowMaxAdjustUp,

@@ -960,6 +960,16 @@ bool ContextualCheckTransaction(
         }
     }
 
+    // Juno Cash soft fork: temporarily reject all transactions containing Orchard actions
+    // in response to the Orchard circuit soundness vulnerability. This freezes the Orchard
+    // pool (no new outputs, no spends) until a hard fork re-enables it with a fixed circuit.
+    if (consensus.TemporaryOrchardDisablingSoftForkActive(nHeight) && orchard_bundle.IsPresent()) {
+        return state.DoS(
+            dosLevelConstricting,
+            error("ContextualCheckTransaction(): transaction has Orchard actions (temporarily disabled)"),
+            REJECT_INVALID, "bad-tx-has-orchard-actions");
+    }
+
     // Rules that apply only to Sprout
     if (beforeOverwinter) {
         // Reject transactions which are intended for Overwinter and beyond
@@ -4398,6 +4408,14 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     // Remove conflicting transactions from the mempool.
     std::list<CTransaction> txConflicted;
     mempool.removeForBlock(pblock->vtx, pindexNew->nHeight, txConflicted);
+
+    // If we've just connected the last block before the temporary Orchard-disabling
+    // soft fork, purge the mempool of transactions containing Orchard actions so they
+    // are not mined into the next block. After this point AcceptToMemoryPool rejects
+    // Orchard-containing transactions via ContextualCheckTransaction.
+    if (chainparams.GetConsensus().nTemporaryOrchardDisablingSoftForkHeight == pindexNew->nHeight + 1) {
+        mempool.removeContainingOrchard();
+    }
 
     // Remove transactions that expire at new block height from mempool
     auto ids = mempool.removeExpired(pindexNew->nHeight);

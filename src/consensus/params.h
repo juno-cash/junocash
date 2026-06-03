@@ -330,6 +330,12 @@ struct Params {
 
     bool FutureTimestampSoftForkActive(int nHeight) const;
 
+    /**
+     * Returns true if the temporary Orchard-disabling soft fork is active as of
+     * the given block height.
+     */
+    bool TemporaryOrchardDisablingSoftForkActive(int nHeight) const;
+
     bool FeatureActive(int nHeight, Consensus::ConsensusFeature feature) const;
 
     bool FeatureRequired(Consensus::ConsensusFeature feature) const;
@@ -488,6 +494,17 @@ struct Params {
      * activation height in chainparams.cpp.
      */
     int nFutureTimestampSoftForkHeight = 2;
+
+    /**
+     * Juno Cash temporary Orchard-disabling soft fork.
+     *
+     * At and above this height, transactions containing Orchard actions are
+     * rejected by consensus, freezing the Orchard pool in response to the
+     * Orchard circuit soundness vulnerability until a hard fork re-enables it.
+     * Defaults to NO_ACTIVATION_HEIGHT (disabled); set per-network in
+     * chainparams.cpp.
+     */
+    int nTemporaryOrchardDisablingSoftForkHeight = Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
 
     /** Proof of work parameters */
     // Juno Cash: Legacy Equihash parameters removed (uses RandomX instead)

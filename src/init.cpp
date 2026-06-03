@@ -447,6 +447,7 @@ std::string HelpMessage(HelpMessageMode mode)
         strUsage += HelpMessageOpt("-limitdescendantsize=<n>", strprintf("Do not accept transactions if any ancestor would have more than <n> kilobytes of in-mempool descendants (default: %u).", DEFAULT_DESCENDANT_SIZE_LIMIT));
         strUsage += HelpMessageOpt("-nuparams=hexBranchId:activationHeight", "Use given activation height for specified network upgrade (regtest-only)");
         strUsage += HelpMessageOpt("-nurejectoldversions", strprintf("Reject peers that don't know about the current epoch (regtest-only) (default: %u)", DEFAULT_NU_REJECT_OLD_VERSIONS));
+        strUsage += HelpMessageOpt("-regtesttemporaryorcharddisablingsoftforkheight=<n>", "Activation height for the temporary Orchard-disabling soft fork, or -1 to disable (regtest-only)");
         strUsage += HelpMessageOpt(
                 "-fundingstream=streamId:startHeight:endHeight:comma_delimited_addresses",
                 "Use given addresses for block subsidy share paid to the funding stream with id <streamId> (regtest-only)");
@@ -1327,6 +1328,17 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         if (chainparams.NetworkIDString() != "regtest") {
             return InitError("-nurejectoldversions may only be set on regtest.");
         }
+    }
+
+    if (mapArgs.count("-regtesttemporaryorcharddisablingsoftforkheight")) {
+        if (chainparams.NetworkIDString() != "regtest") {
+            return InitError("-regtesttemporaryorcharddisablingsoftforkheight may only be set on regtest.");
+        }
+        int nHeight;
+        if (!ParseInt32(mapArgs["-regtesttemporaryorcharddisablingsoftforkheight"], &nHeight) || nHeight < -1) {
+            return InitError("Invalid height for -regtesttemporaryorcharddisablingsoftforkheight.");
+        }
+        UpdateTemporaryOrchardDisablingSoftForkHeight(nHeight);
     }
 
     if (!mapMultiArgs["-fundingstream"].empty()) {

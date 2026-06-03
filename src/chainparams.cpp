@@ -147,6 +147,9 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nActivationHeight =
             Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
 
+        // Temporary Orchard-disabling soft fork (Orchard circuit soundness remediation).
+        consensus.nTemporaryOrchardDisablingSoftForkHeight = 289460;
+
         consensus.nFundingPeriodLength = consensus.nPostBlossomSubsidyHalvingInterval / 48;
 
         // guarantees the first 2 characters, when base58 encoded, are "t1"
@@ -312,6 +315,9 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nProtocolVersion = 0x7FFFFFFF;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nActivationHeight =
             Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
+
+        // Temporary Orchard-disabling soft fork (Orchard circuit soundness remediation).
+        consensus.nTemporaryOrchardDisablingSoftForkHeight = 230314;
 
         consensus.nFundingPeriodLength = consensus.nPostBlossomSubsidyHalvingInterval / 48;
 
@@ -559,6 +565,11 @@ public:
         consensus.vUpgrades[idx].nActivationHeight = nActivationHeight;
     }
 
+    void UpdateTemporaryOrchardDisablingSoftForkHeight(int nHeight)
+    {
+        consensus.nTemporaryOrchardDisablingSoftForkHeight = nHeight;
+    }
+
     void UpdateFundingStreamParameters(Consensus::FundingStreamIndex idx, Consensus::FundingStream fs)
     {
         assert(idx >= Consensus::FIRST_FUNDING_STREAM && idx < Consensus::MAX_FUNDING_STREAMS);
@@ -678,6 +689,11 @@ std::string CChainParams::GetDefaultDonationAddress() const {
 void UpdateNetworkUpgradeParameters(Consensus::UpgradeIndex idx, int nActivationHeight)
 {
     regTestParams.UpdateNetworkUpgradeParameters(idx, nActivationHeight);
+}
+
+void UpdateTemporaryOrchardDisablingSoftForkHeight(int nHeight)
+{
+    regTestParams.UpdateTemporaryOrchardDisablingSoftForkHeight(nHeight);
 }
 
 void UpdateFundingStreamParameters(Consensus::FundingStreamIndex idx, Consensus::FundingStream fs)

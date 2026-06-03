@@ -735,6 +735,26 @@ void CTxMemPool::removeWithAnchor(const uint256 &invalidRoot, ShieldedType type)
     }
 }
 
+void CTxMemPool::removeContainingOrchard()
+{
+    // Used at the temporary Orchard-disabling soft fork boundary to purge any
+    // transactions containing Orchard actions, which are no longer valid to mine.
+    LOCK(cs);
+    list<CTransaction> transactionsToRemove;
+
+    for (indexed_transaction_set::const_iterator it = mapTx.begin(); it != mapTx.end(); it++) {
+        const CTransaction& tx = it->GetTx();
+        if (tx.GetOrchardBundle().IsPresent()) {
+            transactionsToRemove.push_back(tx);
+        }
+    }
+
+    for (const CTransaction& tx : transactionsToRemove) {
+        list<CTransaction> removed;
+        remove(tx, removed, true);
+    }
+}
+
 void CTxMemPool::removeConflicts(const CTransaction &tx, std::list<CTransaction>& removed)
 {
     // Remove transactions which depend on inputs of tx, recursively
