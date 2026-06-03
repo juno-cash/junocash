@@ -446,6 +446,7 @@ std::string HelpMessage(HelpMessageMode mode)
         strUsage += HelpMessageOpt("-limitdescendantcount=<n>", strprintf("Do not accept transactions if any ancestor would have <n> or more in-mempool descendants (default: %u)", DEFAULT_DESCENDANT_LIMIT));
         strUsage += HelpMessageOpt("-limitdescendantsize=<n>", strprintf("Do not accept transactions if any ancestor would have more than <n> kilobytes of in-mempool descendants (default: %u).", DEFAULT_DESCENDANT_SIZE_LIMIT));
         strUsage += HelpMessageOpt("-nuparams=hexBranchId:activationHeight", "Use given activation height for specified network upgrade (regtest-only)");
+        strUsage += HelpMessageOpt("-regtestorcharddisableheight=<n>", "Use given temporary Orchard disabling soft fork height (regtest-only)");
         strUsage += HelpMessageOpt("-nurejectoldversions", strprintf("Reject peers that don't know about the current epoch (regtest-only) (default: %u)", DEFAULT_NU_REJECT_OLD_VERSIONS));
         strUsage += HelpMessageOpt(
                 "-fundingstream=streamId:startHeight:endHeight:comma_delimited_addresses",
@@ -1327,6 +1328,21 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         if (chainparams.NetworkIDString() != "regtest") {
             return InitError("-nurejectoldversions may only be set on regtest.");
         }
+    }
+
+    if (mapArgs.count("-regtestorcharddisableheight")) {
+        if (chainparams.NetworkIDString() != "regtest") {
+            return InitError("Temporary Orchard disabling soft fork height may only be overridden on regtest.");
+        }
+        int nOrchardDisableHeight;
+        if (!ParseInt32(mapArgs["-regtestorcharddisableheight"], &nOrchardDisableHeight)) {
+            return InitError(strprintf("Invalid -regtestorcharddisableheight (%s)", mapArgs["-regtestorcharddisableheight"]));
+        }
+        if (nOrchardDisableHeight < Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT) {
+            return InitError(strprintf("Invalid -regtestorcharddisableheight (%s)", mapArgs["-regtestorcharddisableheight"]));
+        }
+        UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(nOrchardDisableHeight);
+        LogPrintf("Setting temporary Orchard disabling soft fork height to %d\n", nOrchardDisableHeight);
     }
 
     if (!mapMultiArgs["-fundingstream"].empty()) {

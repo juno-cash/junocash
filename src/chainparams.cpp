@@ -143,7 +143,7 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_NU6].nActivationHeight = 2;
         consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nProtocolVersion = 170140;
         consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nActivationHeight = 3;
-        consensus.nTemporaryOrchardDisablingSoftForkHeight = 289500;
+        consensus.nTemporaryOrchardDisablingSoftForkHeight = 289460;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nProtocolVersion = 0x7FFFFFFF;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nActivationHeight =
             Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
@@ -310,6 +310,7 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nProtocolVersion = 170130;
         consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nActivationHeight =
             Consensus::NetworkUpgrade::ALWAYS_ACTIVE;
+        consensus.nTemporaryOrchardDisablingSoftForkHeight = 230314;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nProtocolVersion = 0x7FFFFFFF;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nActivationHeight =
             Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
@@ -487,6 +488,8 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nProtocolVersion = 170130;
         consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nActivationHeight =
             Consensus::NetworkUpgrade::ALWAYS_ACTIVE;
+        consensus.nTemporaryOrchardDisablingSoftForkHeight =
+            Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nProtocolVersion = 0x7FFFFFFF;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nActivationHeight =
             Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
