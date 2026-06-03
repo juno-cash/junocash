@@ -29,7 +29,7 @@ import errno
 from . import coverage
 from .authproxy import AuthServiceProxy, JSONRPCException
 
-ZCASHD_BINARY = os.path.join('src', 'zcashd')
+ZCASHD_BINARY = os.path.join('src', 'junocashd')
 
 COVERAGE_DIR = None
 PRE_BLOSSOM_BLOCK_TARGET_SPACING = 150
@@ -179,16 +179,20 @@ def initialize_datadir(dirname, n, clock_offset=0):
     if not os.path.isdir(datadir):
         os.makedirs(datadir)
     rpc_u, rpc_p = rpc_auth_pair(n)
-    with open(os.path.join(datadir, "zcash.conf"), 'w', encoding='utf8') as f:
-        f.write("regtest=1\n")
-        f.write("showmetrics=0\n")
-        f.write("rpcuser=" + rpc_u + "\n")
-        f.write("rpcpassword=" + rpc_p + "\n")
-        f.write("port="+str(p2p_port(n))+"\n")
-        f.write("rpcport="+str(rpc_port(n))+"\n")
-        f.write("listenonion=0\n")
-        if clock_offset != 0:
-            f.write('clockoffset='+str(clock_offset)+'\n')
+    config = []
+    config.append("regtest=1\n")
+    config.append("showmetrics=0\n")
+    config.append("rpcuser=" + rpc_u + "\n")
+    config.append("rpcpassword=" + rpc_p + "\n")
+    config.append("port="+str(p2p_port(n))+"\n")
+    config.append("rpcport="+str(rpc_port(n))+"\n")
+    config.append("listenonion=0\n")
+    if clock_offset != 0:
+        config.append('clockoffset='+str(clock_offset)+'\n')
+
+    for config_name in ("junocashd.conf", "zcash.conf"):
+        with open(os.path.join(datadir, config_name), 'w', encoding='utf8') as f:
+            f.writelines(config)
 
     return datadir
 

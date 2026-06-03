@@ -56,16 +56,16 @@ class OrchardNU6_2Test(BitcoinTestFramework):
 
     def run_test(self):
         pending = self.nodes[0].getblockchaininfo()
-        assert_equal(pending['blocks'], 0)
-        assert_equal(pending['upgrades'][branch_id(NU6_2_BRANCH_ID)]['status'], 'pending')
-        assert_equal(pending['consensus']['chaintip'], '00000000')
-        assert_equal(pending['consensus']['nextblock'], branch_id(NU6_1_BRANCH_ID))
+        assert_equal(0, pending['blocks'])
+        assert_equal('pending', pending['upgrades'][branch_id(NU6_2_BRANCH_ID)]['status'])
+        assert_equal('00000000', pending['consensus']['chaintip'])
+        assert_equal(branch_id(NU6_1_BRANCH_ID), pending['consensus']['nextblock'])
 
         active = self.nodes[1].getblockchaininfo()
-        assert_equal(active['blocks'], 0)
-        assert_equal(active['upgrades'][branch_id(NU6_2_BRANCH_ID)]['status'], 'active')
-        assert_equal(active['consensus']['chaintip'], branch_id(NU6_2_BRANCH_ID))
-        assert_equal(active['consensus']['nextblock'], branch_id(NU6_2_BRANCH_ID))
+        assert_equal(0, active['blocks'])
+        assert_equal('active', active['upgrades'][branch_id(NU6_2_BRANCH_ID)]['status'])
+        assert_equal(branch_id(NU6_2_BRANCH_ID), active['consensus']['chaintip'])
+        assert_equal(branch_id(NU6_2_BRANCH_ID), active['consensus']['nextblock'])
 
 
 if __name__ == '__main__':

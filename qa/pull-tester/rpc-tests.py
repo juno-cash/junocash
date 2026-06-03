@@ -319,7 +319,7 @@ def run_tests(test_handler, test_list, src_dir, build_dir, exeext, jobs=1, enabl
 
     #Set env vars
     if "ZCASHD" not in os.environ:
-        os.environ["ZCASHD"] = build_dir + '/src/zcashd' + exeext
+        os.environ["ZCASHD"] = build_dir + '/src/junocashd' + exeext
 
     tests_dir = src_dir + '/qa/rpc-tests/'
 
