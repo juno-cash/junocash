@@ -6,6 +6,8 @@
 #include "key.h"
 #include "miner.h"
 #include "util/system.h"
+#include "util/test.h"
+#include "zcash/Address.hpp"
 
 #include <variant>
 
@@ -121,5 +123,28 @@ TEST(Miner, GetMinerAddress) {
         GetMinerAddress(minerAddress);
         EXPECT_FALSE(IsValidMinerAddress(minerAddress));
     }
+}
+
+TEST(Miner, TemporaryOrchardFreezeRequiresTransparentCoinbase) {
+    RegtestActivateNU5();
+    const int freezeHeight = 100;
+    UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(freezeHeight);
+
+    boost::shared_ptr<CReserveScript> coinbaseScript(new CReserveScript());
+    coinbaseScript->reserveScript = CScript() << OP_TRUE;
+    EXPECT_NO_THROW({
+        auto tx = CreateCoinbaseTransaction(Params(), CAmount{0}, coinbaseScript, freezeHeight);
+        EXPECT_TRUE(tx.IsCoinBase());
+        EXPECT_FALSE(tx.GetOrchardBundle().IsPresent());
+    });
+
+    auto saplingSk = libzcash::SaplingSpendingKey::random();
+    MinerAddress shieldedMinerAddress = saplingSk.default_address();
+    EXPECT_THROW(
+        CreateCoinbaseTransaction(Params(), CAmount{0}, shieldedMinerAddress, freezeHeight),
+        std::runtime_error);
+
+    UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT);
+    RegtestDeactivateNU5();
 }
 #endif // ENABLE_MINING

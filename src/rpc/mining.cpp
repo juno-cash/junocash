@@ -685,8 +685,10 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
                 // Note that the time to create the coinbase tx here does not add to,
                 // but instead is included in, the 10 second delay, since we're waiting
                 // until an absolute time is reached.
-                if (!cached_next_cb_mtx && IsShieldedMinerAddress(minerAddress)) {
-                    cached_next_cb_height = nHeight + 2;
+                cached_next_cb_height = nHeight + 2;
+                if (!cached_next_cb_mtx &&
+                    IsShieldedMinerAddress(minerAddress) &&
+                    !Params().GetConsensus().TemporaryOrchardDisablingSoftForkActive(cached_next_cb_height)) {
                     cached_next_cb_mtx = CreateCoinbaseTransaction(
                         Params(), CAmount{0}, minerAddress, cached_next_cb_height);
                     next_cb_mtx = cached_next_cb_mtx;
