@@ -321,6 +321,11 @@ TEST(TransactionBuilder, TemporaryOrchardDisablingSoftFork)
     EXPECT_TRUE(ContextualCheckTransaction(hardForkTx, hardForkState, Params(), hardForkHeight, true));
     EXPECT_EQ(hardForkState.GetRejectReason(), "");
 
+    const int earlyHardForkHeight = 90;
+    RegtestActivateNU6point2(false, earlyHardForkHeight);
+    UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(freezeHeight);
+    EXPECT_FALSE(Params().GetConsensus().TemporaryOrchardDisablingSoftForkActive(freezeHeight));
+
     auto coinbaseMtx = CreateNewContextualCMutableTransaction(Params().GetConsensus(), freezeHeight, false);
     coinbaseMtx.vin.resize(1);
     coinbaseMtx.vin[0].prevout.SetNull();

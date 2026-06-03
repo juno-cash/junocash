@@ -4446,7 +4446,7 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
         uiInterface.NotifyTxExpiration(id);
     }
 
-    if (chainparams.GetConsensus().nTemporaryOrchardDisablingSoftForkHeight == pindexNew->nHeight + 1) {
+    if (chainparams.GetConsensus().TemporaryOrchardDisablingSoftForkActive(pindexNew->nHeight + 1)) {
         mempool.removeContainingOrchard();
     }
 
