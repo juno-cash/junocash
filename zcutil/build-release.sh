@@ -465,6 +465,27 @@ build_platform() {
     fi
     cd "$REPO_ROOT"
 
+    # For macOS cross-builds, point rustc at the SDK via SDKROOT. Modern rustc
+    # (>=1.96) shells out to "xcrun" to discover the SDK for version embedding,
+    # which does not exist on a Linux build host; SDKROOT makes the build
+    # hermetic and silences the "invoking xcrun ... failed" warning. The C++
+    # toolchain already gets --sysroot via the depends compiler wrappers.
+    case "$HOST_TRIPLET" in
+        *darwin*)
+            local _sdk
+            for _sdk in "$SDK_PATH"/Xcode-*-extracted-SDK-with-libcxx-headers "$SDK_PATH"/MacOSX*.sdk; do
+                if [ -e "$_sdk" ]; then
+                    export SDKROOT="$_sdk"
+                    print_info "Using macOS SDKROOT=$SDKROOT"
+                    break
+                fi
+            done
+            ;;
+        *)
+            unset SDKROOT || true
+            ;;
+    esac
+
     # Configure and build
     print_info "Configuring JunoCash for $PLATFORM_NAME..."
     ./zcutil/clean.sh || true
