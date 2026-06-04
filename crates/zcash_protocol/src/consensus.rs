@@ -3,6 +3,7 @@
 use core::cmp::{Ord, Ordering};
 use core::convert::TryFrom;
 use core::fmt;
+use core::num::TryFromIntError;
 use core::ops::{Add, Bound, RangeBounds, Sub};
 
 #[cfg(feature = "std")]
@@ -12,8 +13,8 @@ use crate::constants::{mainnet, regtest, testnet};
 
 /// A wrapper type representing blockchain heights.
 ///
-/// Safe conversion from various integer types, as well as addition and subtraction, are
-/// provided.
+/// Safe conversion from various integer types, as well as addition and subtraction, are provided.
+/// Subtraction of block heights, and of deltas to block heights, are always saturating.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct BlockHeight(u32);
@@ -125,6 +126,64 @@ impl Sub<BlockHeight> for BlockHeight {
         self.0.saturating_sub(other.0)
     }
 }
+
+/// A wrapper type the index of a transaction within a block.
+///
+/// Safe conversion from various integer types are provided.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TxIndex(u16);
+
+impl From<TxIndex> for u16 {
+    fn from(value: TxIndex) -> Self {
+        value.0
+    }
+}
+
+impl From<TxIndex> for u32 {
+    fn from(value: TxIndex) -> Self {
+        value.0.into()
+    }
+}
+
+impl From<TxIndex> for u64 {
+    fn from(value: TxIndex) -> Self {
+        value.0.into()
+    }
+}
+
+impl From<u16> for TxIndex {
+    fn from(value: u16) -> Self {
+        TxIndex(value)
+    }
+}
+
+impl TryFrom<u32> for TxIndex {
+    type Error = TryFromIntError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Ok(TxIndex(u16::try_from(value)?))
+    }
+}
+
+impl TryFrom<u64> for TxIndex {
+    type Error = TryFromIntError;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        Ok(TxIndex(u16::try_from(value)?))
+    }
+}
+
+impl TryFrom<usize> for TxIndex {
+    type Error = TryFromIntError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        Ok(TxIndex(u16::try_from(value)?))
+    }
+}
+
+#[cfg(feature = "std")]
+memuse::impl_no_dynamic_usage!(TxIndex);
 
 /// The enumeration of known Zcash network types.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -433,6 +492,7 @@ impl Parameters for MainNetwork {
             NetworkUpgrade::Nu5 => Some(BlockHeight(1_687_104)),
             NetworkUpgrade::Nu6 => Some(BlockHeight(2_726_400)),
             NetworkUpgrade::Nu6_1 => Some(BlockHeight(3_146_400)),
+            NetworkUpgrade::Nu6_2 => Some(BlockHeight(3_364_600)),
             #[cfg(zcash_unstable = "nu7")]
             NetworkUpgrade::Nu7 => None,
             #[cfg(zcash_unstable = "zfuture")]
@@ -466,6 +526,7 @@ impl Parameters for TestNetwork {
             NetworkUpgrade::Nu5 => Some(BlockHeight(1_842_420)),
             NetworkUpgrade::Nu6 => Some(BlockHeight(2_976_000)),
             NetworkUpgrade::Nu6_1 => Some(BlockHeight(3_536_500)),
+            NetworkUpgrade::Nu6_2 => Some(BlockHeight(4_052_000)),
             #[cfg(zcash_unstable = "nu7")]
             NetworkUpgrade::Nu7 => None,
             #[cfg(zcash_unstable = "zfuture")]
@@ -540,6 +601,10 @@ pub enum NetworkUpgrade {
     ///
     /// [Nu6.1]: https://z.cash/upgrade/nu6.1/
     Nu6_1,
+    /// The [Nu6.2] network upgrade.
+    ///
+    /// [Nu6.2]: https://z.cash/upgrade/nu6.2/
+    Nu6_2,
     /// The [Nu7 (proposed)] network upgrade.
     ///
     /// [Nu7 (proposed)]: https://z.cash/upgrade/nu7/
@@ -568,6 +633,7 @@ impl fmt::Display for NetworkUpgrade {
             NetworkUpgrade::Nu5 => write!(f, "Nu5"),
             NetworkUpgrade::Nu6 => write!(f, "Nu6"),
             NetworkUpgrade::Nu6_1 => write!(f, "Nu6.1"),
+            NetworkUpgrade::Nu6_2 => write!(f, "Nu6.2"),
             #[cfg(zcash_unstable = "nu7")]
             NetworkUpgrade::Nu7 => write!(f, "Nu7"),
             #[cfg(zcash_unstable = "zfuture")]
@@ -587,6 +653,7 @@ impl NetworkUpgrade {
             NetworkUpgrade::Nu5 => BranchId::Nu5,
             NetworkUpgrade::Nu6 => BranchId::Nu6,
             NetworkUpgrade::Nu6_1 => BranchId::Nu6_1,
+            NetworkUpgrade::Nu6_2 => BranchId::Nu6_2,
             #[cfg(zcash_unstable = "nu7")]
             NetworkUpgrade::Nu7 => BranchId::Nu7,
             #[cfg(zcash_unstable = "zfuture")]
@@ -608,6 +675,7 @@ const UPGRADES_IN_ORDER: &[NetworkUpgrade] = &[
     NetworkUpgrade::Nu5,
     NetworkUpgrade::Nu6,
     NetworkUpgrade::Nu6_1,
+    NetworkUpgrade::Nu6_2,
     #[cfg(zcash_unstable = "nu7")]
     NetworkUpgrade::Nu7,
 ];
@@ -616,6 +684,15 @@ const UPGRADES_IN_ORDER: &[NetworkUpgrade] = &[
 ///
 /// [ZIP 212]: https://zips.z.cash/zip-0212#changes-to-the-process-of-receiving-sapling-or-orchard-notes
 pub const ZIP212_GRACE_PERIOD: u32 = 32256;
+
+/// The number of blocks after which a coinbase output is considered mature and spendable.
+///
+/// From [§ 7.1.2 of the Zcash Protocol Specification][txnconsensus]:
+/// > A transaction MUST NOT spend a transparent output of a coinbase transaction from a
+/// > block less than 100 blocks prior to the spend.
+///
+/// [txnconsensus]: https://zips.z.cash/protocol/protocol.pdf#txnconsensus
+pub const COINBASE_MATURITY_BLOCKS: u32 = 100;
 
 /// A globally-unique identifier for a set of consensus rules within the Zcash chain.
 ///
@@ -650,6 +727,8 @@ pub enum BranchId {
     Nu6,
     /// The consensus rules deployed by [`NetworkUpgrade::Nu6_1`].
     Nu6_1,
+    /// The consensus rules deployed by [`NetworkUpgrade::Nu6_2`].
+    Nu6_2,
     /// The consensus rules to be deployed by [`NetworkUpgrade::Nu7`].
     #[cfg(zcash_unstable = "nu7")]
     Nu7,
@@ -676,6 +755,7 @@ impl TryFrom<u32> for BranchId {
             0xc2d6_d0b4 => Ok(BranchId::Nu5),
             0xc8e7_1055 => Ok(BranchId::Nu6),
             0x4dec_4df0 => Ok(BranchId::Nu6_1),
+            0x5437_f330 => Ok(BranchId::Nu6_2),
             #[cfg(zcash_unstable = "nu7")]
             0xffff_ffff => Ok(BranchId::Nu7),
             #[cfg(zcash_unstable = "zfuture")]
@@ -697,6 +777,7 @@ impl From<BranchId> for u32 {
             BranchId::Nu5 => 0xc2d6_d0b4,
             BranchId::Nu6 => 0xc8e7_1055,
             BranchId::Nu6_1 => 0x4dec_4df0,
+            BranchId::Nu6_2 => 0x5437_f330,
             #[cfg(zcash_unstable = "nu7")]
             BranchId::Nu7 => 0xffff_ffff,
             #[cfg(zcash_unstable = "zfuture")]
@@ -772,6 +853,9 @@ impl BranchId {
                 .map(|lower| (lower, params.activation_height(NetworkUpgrade::Nu6_1))),
             BranchId::Nu6_1 => params
                 .activation_height(NetworkUpgrade::Nu6_1)
+                .map(|lower| (lower, params.activation_height(NetworkUpgrade::Nu6_2))),
+            BranchId::Nu6_2 => params
+                .activation_height(NetworkUpgrade::Nu6_2)
                 .map(|lower| {
                     #[cfg(zcash_unstable = "nu7")]
                     let upper = params.activation_height(NetworkUpgrade::Nu7);
@@ -795,6 +879,45 @@ impl BranchId {
     pub fn sprout_uses_groth_proofs(&self) -> bool {
         !matches!(self, BranchId::Sprout | BranchId::Overwinter)
     }
+
+    // Returns `true` for consensus branches that support the Sprout protocol, `false` otherwise..
+    pub fn has_sprout(&self) -> bool {
+        use BranchId::*;
+        match self {
+            Sprout | Overwinter | Sapling | Blossom | Heartwood | Canopy | Nu5 | Nu6 | Nu6_1
+            | Nu6_2 => true,
+            #[cfg(zcash_unstable = "nu7")]
+            BranchId::Nu7 => false,
+            #[cfg(zcash_unstable = "zfuture")]
+            BranchId::ZFuture => false,
+        }
+    }
+
+    // Returns `true` for consensus branches that support the Sapling protocol, `false` otherwise..
+    pub fn has_sapling(&self) -> bool {
+        use BranchId::*;
+        match self {
+            Sprout | Overwinter => false,
+            Sapling | Blossom | Heartwood | Canopy | Nu5 | Nu6 | Nu6_1 | Nu6_2 => true,
+            #[cfg(zcash_unstable = "nu7")]
+            BranchId::Nu7 => true,
+            #[cfg(zcash_unstable = "zfuture")]
+            BranchId::ZFuture => true,
+        }
+    }
+
+    // Returns `true` for consensus branches that support the Orchard protocol, `false` otherwise.
+    pub fn has_orchard(&self) -> bool {
+        use BranchId::*;
+        match self {
+            Sprout | Overwinter | Sapling | Blossom | Heartwood | Canopy => false,
+            Nu5 | Nu6 | Nu6_1 | Nu6_2 => true,
+            #[cfg(zcash_unstable = "nu7")]
+            BranchId::Nu7 => true,
+            #[cfg(zcash_unstable = "zfuture")]
+            BranchId::ZFuture => true,
+        }
+    }
 }
 
 #[cfg(any(test, feature = "test-dependencies"))]
@@ -815,6 +938,7 @@ pub mod testing {
             BranchId::Nu5,
             BranchId::Nu6,
             BranchId::Nu6_1,
+            BranchId::Nu6_2,
             #[cfg(zcash_unstable = "nu7")]
             BranchId::Nu7,
             #[cfg(zcash_unstable = "zfuture")]
@@ -846,7 +970,7 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use super::{
-        BlockHeight, BranchId, NetworkUpgrade, Parameters, MAIN_NETWORK, UPGRADES_IN_ORDER,
+        BlockHeight, BranchId, MAIN_NETWORK, NetworkUpgrade, Parameters, UPGRADES_IN_ORDER,
     };
 
     #[test]
