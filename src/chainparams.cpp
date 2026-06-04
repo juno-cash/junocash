@@ -316,7 +316,7 @@ public:
             Consensus::NetworkUpgrade::ALWAYS_ACTIVE;
         consensus.nTemporaryOrchardDisablingSoftForkHeight = 230314;
         consensus.vUpgrades[Consensus::UPGRADE_NU6_2].nProtocolVersion = 170150;
-        consensus.vUpgrades[Consensus::UPGRADE_NU6_2].nActivationHeight = 231000;
+        consensus.vUpgrades[Consensus::UPGRADE_NU6_2].nActivationHeight = 233000;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nProtocolVersion = 0x7FFFFFFF;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nActivationHeight =
             Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
