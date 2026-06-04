@@ -201,8 +201,26 @@ CWalletTx GetValidSproutSpend(const libzcash::SproutSpendingKey& sk,
     return wtx;
 }
 
+// Juno Cash: gtests share global Params() state and run sequentially. The RegtestActivate*
+// helpers below activate a prefix of network upgrades but historically did not deactivate the
+// later ones, so leftover activations from a previous test could violate the upgrade-ordering
+// invariant asserted in ContextualCheckTransaction (e.g. Heartwood active while Sapling is not).
+// Reset every network upgrade (and the temporary Orchard soft fork) to NO_ACTIVATION before each
+// helper re-establishes its intended prefix, so every RegtestActivate* call yields a complete,
+// self-consistent schedule regardless of prior test state.
+static void RegtestResetNetworkUpgrades() {
+    for (int i = Consensus::UPGRADE_OVERWINTER; i < Consensus::MAX_NETWORK_UPGRADES; i++) {
+        UpdateNetworkUpgradeParameters(
+            static_cast<Consensus::UpgradeIndex>(i),
+            Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT);
+    }
+    UpdateRegtestTemporaryOrchardDisablingSoftForkHeight(
+        Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT);
+}
+
 const CChainParams& RegtestActivateOverwinter() {
     SelectParams(CBaseChainParams::REGTEST);
+    RegtestResetNetworkUpgrades();
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     return Params();
 }
@@ -214,6 +232,7 @@ void RegtestDeactivateOverwinter() {
 // Sapling
 const Consensus::Params& RegtestActivateSapling() {
     SelectParams(CBaseChainParams::REGTEST);
+    RegtestResetNetworkUpgrades();
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_SAPLING, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     return Params().GetConsensus();
@@ -226,6 +245,7 @@ void RegtestDeactivateSapling() {
 
 const CChainParams& RegtestActivateBlossom(bool updatePow, int blossomActivationHeight) {
     SelectParams(CBaseChainParams::REGTEST);
+    RegtestResetNetworkUpgrades();
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_SAPLING, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_BLOSSOM, blossomActivationHeight);
@@ -245,6 +265,7 @@ void RegtestDeactivateBlossom() {
 
 const Consensus::Params& RegtestActivateHeartwood(bool updatePow, int heartwoodActivationHeight) {
     SelectParams(CBaseChainParams::REGTEST);
+    RegtestResetNetworkUpgrades();
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_SAPLING, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_BLOSSOM, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
@@ -266,6 +287,7 @@ void RegtestDeactivateHeartwood() {
 
 const Consensus::Params& RegtestActivateCanopy(bool updatePow, int canopyActivationHeight) {
     SelectParams(CBaseChainParams::REGTEST);
+    RegtestResetNetworkUpgrades();
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_SAPLING, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_BLOSSOM, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
@@ -293,6 +315,7 @@ void RegtestDeactivateCanopy() {
 
 const Consensus::Params& RegtestActivateNU5(bool updatePow, int nu5ActivationHeight) {
     SelectParams(CBaseChainParams::REGTEST);
+    RegtestResetNetworkUpgrades();
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_SAPLING, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_BLOSSOM, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
@@ -323,6 +346,7 @@ void RegtestDeactivateNU5() {
 
 const Consensus::Params& RegtestActivateNU6(bool updatePow, int nu6ActivationHeight) {
     SelectParams(CBaseChainParams::REGTEST);
+    RegtestResetNetworkUpgrades();
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_SAPLING, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_BLOSSOM, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
@@ -357,6 +381,7 @@ const Consensus::Params& RegtestActivateNU6point1(
     int nu6point1ActivationHeight,
     int temporaryOrchardDisablingSoftForkHeight) {
     SelectParams(CBaseChainParams::REGTEST);
+    RegtestResetNetworkUpgrades();
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_SAPLING, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_BLOSSOM, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
@@ -392,6 +417,7 @@ void RegtestDeactivateNU6point1() {
 
 const Consensus::Params& RegtestActivateNU6point2(bool updatePow, int nu6point2ActivationHeight) {
     SelectParams(CBaseChainParams::REGTEST);
+    RegtestResetNetworkUpgrades();
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_SAPLING, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_BLOSSOM, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
