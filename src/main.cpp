@@ -5885,8 +5885,16 @@ static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state
         if (mi == mapBlockIndex.end())
             return state.DoS(10, error("%s: prev block not found", __func__), 0, "bad-prevblk");
         pindexPrev = (*mi).second;
-        if (pindexPrev->nStatus & BLOCK_FAILED_MASK)
-            return state.DoS(100, error("%s: prev block invalid", __func__), REJECT_INVALID, "bad-prevblk");
+        if (pindexPrev->nStatus & BLOCK_FAILED_MASK) {
+            int level = 100;
+            // Don't ban peers if the invalid block is because of the soft fork
+            // that temporarily disabled Orchard. The helper already returns false
+            // once NU6.2 re-enables Orchard, so no extra NU6.2 guard is needed.
+            if (chainparams.GetConsensus().TemporaryOrchardDisablingSoftForkActive(pindexPrev->nHeight)) {
+                level = 0;
+            }
+            return state.DoS(level, error("%s: prev block invalid", __func__), REJECT_INVALID, "bad-prevblk");
+        }
     }
 
     if (!CheckBlockHeader(block, state, chainparams, true, pindexPrev))
