@@ -145,7 +145,7 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_NU6_1].nActivationHeight = 3;
         consensus.nTemporaryOrchardDisablingSoftForkHeight = 289460;
         consensus.vUpgrades[Consensus::UPGRADE_NU6_2].nProtocolVersion = 170150;
-        consensus.vUpgrades[Consensus::UPGRADE_NU6_2].nActivationHeight = 290000;
+        consensus.vUpgrades[Consensus::UPGRADE_NU6_2].nActivationHeight = 296000;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nProtocolVersion = 0x7FFFFFFF;
         consensus.vUpgrades[Consensus::UPGRADE_ZFUTURE].nActivationHeight =
             Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
@@ -220,10 +220,12 @@ public:
             (0, consensus.hashGenesisBlock)
             (29453, uint256S("0x000000460b68ba29bc26af81f40d9ff798afbcac35ae3db80bc12cfaf78b9beb"))
             (49000, uint256S("0x00000000269763d45087dfb138ea4ed4bf33e9ab39a6aed2705aca72e4471e69"))
-            (223000, uint256S("0x000000003b6c6139e41a39f9c02373d3a292ece1550ae3b4119de6804491ac40")),
-            1776469572,  // UNIX timestamp of last checkpoint block (223000)
-            251544,      // estimated total number of transactions between genesis and last checkpoint
-            1000         // estimated number of transactions per day after checkpoint
+            (223000, uint256S("0x000000003b6c6139e41a39f9c02373d3a292ece1550ae3b4119de6804491ac40"))
+            (289460, uint256S("0x00000000fc4b635a5e2f771df9a1b253aa529b01233dd857650100283b0637a1"))
+            (290460, uint256S("0x0000000054559c16c9bfbc5defd19e969e5dc9d02eb42efccb171e55b9609759")),
+            1780532302,  // UNIX timestamp of last checkpoint block (290460; soft fork 289460 + 1000)
+            327000,      // estimated total number of transactions between genesis and last checkpoint
+            1500         // estimated number of transactions per day after checkpoint
         };
 
         // Juno Cash: Reset Sprout value pool checkpoint (no Sprout activity on new chain)
@@ -402,9 +404,11 @@ public:
         checkpointData = (CCheckpointData) {
             boost::assign::map_list_of
             (0, consensus.hashGenesisBlock)
-            (173000, uint256S("0x0002517b5072036abc183da6e28591651d1573926a4cef71fa969cae40a174d6")),
-            1776460711,  // UNIX timestamp of last checkpoint block (173000)
-            190300,      // estimated total number of transactions between genesis and last checkpoint
+            (173000, uint256S("0x0002517b5072036abc183da6e28591651d1573926a4cef71fa969cae40a174d6"))
+            (230314, uint256S("0x000440c54301a9f85cbe3558c01446119ef09c7f6cb26f637e7990d71355c92c"))
+            (230360, uint256S("0x00070868e54e68aedf70b9291824cff938aa6d15665628d029ac6d5f4d348642")),
+            1780565244,  // UNIX timestamp of last checkpoint block (230360; soft fork 230314 + 46)
+            253000,      // estimated total number of transactions between genesis and last checkpoint
             1000         // estimated number of transactions per day after checkpoint
         };
 
