@@ -24,6 +24,12 @@
 #include <atomic>
 #include <limits>
 
+// Keep only the two most recently used seed VMs per thread. Validation can
+// encounter many historical epochs during IBD; retaining a VM (and its
+// backing 256 MB cache or 2 GB dataset) for every seed would defeat the global
+// cache/dataset bounds and permit remote memory exhaustion.
+static constexpr size_t MAX_THREAD_LOCAL_VMS = 2;
+
 // Global fast mode and hugepages flags
 static bool rx_fast_mode = false;
 static bool rx_use_hugepages = false;
@@ -93,6 +99,14 @@ static std::mutex main_seed_mutex;
 struct ThreadLocalVM {
     std::map<uint256, randomx_vm*> vms;
     std::map<uint256, bool> vm_is_fast;  // Track if VM was created in fast mode
+    std::map<uint256, uint64_t> vm_last_used;
+    // Keep the backing cache/dataset alive for as long as a VM exists.
+    // randomx_vm borrows the raw pointer passed to randomx_create_vm(); if the
+    // shared CacheEntry/DatasetEntry is evicted while a VM still references it,
+    // the VM is left pointing at freed memory. Holding a shared_ptr here ties the
+    // object's lifetime to the VM so eviction can never free it out from under us.
+    std::map<uint256, std::shared_ptr<CacheEntry>> vm_cache_ref;
+    std::map<uint256, std::shared_ptr<DatasetEntry>> vm_dataset_ref;
 
     ~ThreadLocalVM() {
         for (auto& pair : vms) {
@@ -102,6 +116,10 @@ struct ThreadLocalVM {
         }
         vms.clear();
         vm_is_fast.clear();
+        vm_last_used.clear();
+        // Release backing-object references after all VMs are destroyed.
+        vm_dataset_ref.clear();
+        vm_cache_ref.clear();
     }
 };
 
@@ -415,9 +433,18 @@ void RandomX_Shutdown()
 
     rx_shutting_down = true;
 
-    // Clean up thread-local VMs
+    // Clean up thread-local VMs before releasing their backing caches/datasets.
+    // randomx_vm borrows those pointers and must be destroyed first.
+    for (auto& pair : rxVM_thread.vms) {
+        if (pair.second) {
+            randomx_destroy_vm(pair.second);
+        }
+    }
     rxVM_thread.vms.clear();
     rxVM_thread.vm_is_fast.clear();
+    rxVM_thread.vm_last_used.clear();
+    rxVM_thread.vm_dataset_ref.clear();
+    rxVM_thread.vm_cache_ref.clear();
 
     // Give other threads time to finish
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -491,18 +518,49 @@ static randomx_vm* GetVM(const uint256& seed)
     auto vm_it = rxVM_thread.vms.find(seed);
     bool need_new_vm = (vm_it == rxVM_thread.vms.end());
 
-    // Check if existing VM mode matches what we need
+    // Check if existing VM mode matches what we need.
     if (!need_new_vm) {
         auto fast_it = rxVM_thread.vm_is_fast.find(seed);
         bool vm_is_fast = (fast_it != rxVM_thread.vm_is_fast.end()) && fast_it->second;
 
-        // If we want fast mode but have light VM (or vice versa), recreate
+        // If we want fast mode but have light VM (or vice versa), recreate.
         if (use_fast != vm_is_fast) {
             randomx_destroy_vm(vm_it->second);
             rxVM_thread.vms.erase(vm_it);
             rxVM_thread.vm_is_fast.erase(seed);
+            rxVM_thread.vm_last_used.erase(seed);
+            // Drop backing references only after the VM using them is destroyed.
+            rxVM_thread.vm_dataset_ref.erase(seed);
+            rxVM_thread.vm_cache_ref.erase(seed);
             need_new_vm = true;
         }
+    }
+
+    // Bound the per-thread VM set. The shared_ptr backing references are what
+    // keep evicted global caches alive, so an unbounded VM map would turn the
+    // lifetime fix into unbounded memory retention during IBD.
+    if (need_new_vm && rxVM_thread.vms.size() >= MAX_THREAD_LOCAL_VMS) {
+        assert(rxVM_thread.vms.size() == rxVM_thread.vm_last_used.size());
+        auto oldest = rxVM_thread.vm_last_used.begin();
+        for (auto it = rxVM_thread.vm_last_used.begin();
+             it != rxVM_thread.vm_last_used.end(); ++it) {
+            if (it->second < oldest->second) {
+                oldest = it;
+            }
+        }
+        if (oldest == rxVM_thread.vm_last_used.end()) {
+            return nullptr;
+        }
+        const uint256 evicted_seed = oldest->first;
+        auto evicted_vm = rxVM_thread.vms.find(evicted_seed);
+        if (evicted_vm != rxVM_thread.vms.end()) {
+            randomx_destroy_vm(evicted_vm->second);
+            rxVM_thread.vms.erase(evicted_vm);
+        }
+        rxVM_thread.vm_is_fast.erase(evicted_seed);
+        rxVM_thread.vm_last_used.erase(evicted_seed);
+        rxVM_thread.vm_dataset_ref.erase(evicted_seed);
+        rxVM_thread.vm_cache_ref.erase(evicted_seed);
     }
 
     if (need_new_vm) {
@@ -553,11 +611,20 @@ static randomx_vm* GetVM(const uint256& seed)
             return nullptr;
         }
 
+        // Hold the backing cache/dataset for the life of this VM so that eviction
+        // from seed_caches/seed_datasets can never free it while the VM is live.
+        rxVM_thread.vm_cache_ref[seed] = cache_entry;
+        if (use_fast && dataset_entry) {
+            rxVM_thread.vm_dataset_ref[seed] = dataset_entry;
+        }
+
         rxVM_thread.vms[seed] = vm;
         rxVM_thread.vm_is_fast[seed] = use_fast;
+        rxVM_thread.vm_last_used[seed] = GetTime();
         vm_it = rxVM_thread.vms.find(seed);
     }
 
+    rxVM_thread.vm_last_used[seed] = GetTime();
     return vm_it->second;
 }
 

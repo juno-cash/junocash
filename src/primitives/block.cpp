@@ -34,15 +34,25 @@ uint256 DeriveBlockCommitmentsHash(
 
 uint256 CBlockHeader::GetHash() const
 {
-    // Juno Cash: For RandomX blocks, the block hash is the RandomX hash stored in nSolution
-    // All blocks in Juno Cash use RandomX PoW
+    // Juno Cash: For RandomX blocks, the block hash is the RandomX hash stored in
+    // nSolution. This is the identity the deployed chain was built on (genesis and
+    // all checkpoints/commitments are keyed to it), so it cannot change without a
+    // consensus hard fork.
+    //
+    // SECURITY: because this identity is the PoW digest rather than a hash of the
+    // header, it does NOT by itself commit to the header's other fields. That gap
+    // is closed at acceptance time: AcceptBlockHeader() re-verifies every content
+    // field of a header against the indexed entry on a dedup hit, so a known
+    // identity can no longer be rebound to attacker-chosen contents (forgery),
+    // and a mismatched body can no longer mark a good identity BLOCK_FAILED
+    // (partition).
     if (nSolution.size() == 32) {
         uint256 hash;
         memcpy(hash.begin(), nSolution.data(), 32);
         return hash;
     }
 
-    // Fallback for blocks without solution (shouldn't happen in Juno Cash)
+    // Fallback for blocks without solution (pre-RandomX / genesis path).
     return SerializeHash(*this);
 }
 

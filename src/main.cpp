@@ -5871,6 +5871,24 @@ static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state
     if (miSelf != mapBlockIndex.end()) {
         // Block header is already known.
         pindex = miSelf->second;
+
+        // Defense-in-depth: a mapBlockIndex hit must mean the incoming header is
+        // identical to the one we indexed, not merely that the attacker-supplied
+        // identity matched. Confirm the fields that define the block's contents;
+        // if they differ we are being fed a different block under a known identity.
+        const CBlockHeader indexed = pindex->GetBlockHeader();
+        if (indexed.nVersion != block.nVersion ||
+            indexed.hashPrevBlock != block.hashPrevBlock ||
+            indexed.hashMerkleRoot != block.hashMerkleRoot ||
+            indexed.hashBlockCommitments != block.hashBlockCommitments ||
+            indexed.nTime != block.nTime ||
+            indexed.nBits != block.nBits ||
+            indexed.nNonce != block.nNonce ||
+            indexed.nSolution != block.nSolution) {
+            return state.DoS(100, error("%s: header mismatch for known block hash", __func__),
+                             REJECT_INVALID, "header-mismatch");
+        }
+
         if (ppindex)
             *ppindex = pindex;
         if (pindex->nStatus & BLOCK_FAILED_MASK)
