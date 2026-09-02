@@ -201,7 +201,7 @@ CWalletTx GetValidSproutSpend(const libzcash::SproutSpendingKey& sk,
     return wtx;
 }
 
-// Juno Cash: gtests share global Params() state and run sequentially. The RegtestActivate*
+// Junocash: gtests share global Params() state and run sequentially. The RegtestActivate*
 // helpers below activate a prefix of network upgrades but historically did not deactivate the
 // later ones, so leftover activations from a previous test could violate the upgrade-ordering
 // invariant asserted in ContextualCheckTransaction (e.g. Heartwood active while Sapling is not).

@@ -1,4 +1,4 @@
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 
 #include "asyncrpcoperation_common.h"
 

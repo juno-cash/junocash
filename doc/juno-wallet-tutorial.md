@@ -1,10 +1,10 @@
-# Juno Cash Wallet Tutorial
+# Junocash Wallet Tutorial
 
-This guide covers the basic wallet operations in Juno Cash: mining, shielding coinbase, generating addresses, and sending transactions.
+This guide covers the basic wallet operations in Junocash: mining, shielding coinbase, generating addresses, and sending transactions.
 
 ## Overview
 
-Juno Cash uses a privacy-preserving transaction flow:
+Junocash uses a privacy-preserving transaction flow:
 
 1. **Mine** to a transparent address (automatic)
 2. **Shield** the coinbase to an Orchard shielded address

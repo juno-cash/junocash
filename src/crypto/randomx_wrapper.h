@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Juno Cash developers
+// Copyright (c) 2025 Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 
@@ -13,10 +13,10 @@
 struct randomx_vm;
 
 /**
- * RandomX wrapper for Juno Cash
+ * RandomX wrapper for Junocash
  *
  * RandomX is a proof-of-work algorithm optimized for general-purpose CPUs.
- * This wrapper provides a simple interface for using RandomX in Juno Cash.
+ * This wrapper provides a simple interface for using RandomX in Junocash.
  */
 
 // RandomX epoch configuration

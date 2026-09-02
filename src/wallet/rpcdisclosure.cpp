@@ -38,21 +38,21 @@ bool EnsureWalletIsAvailable(bool avoidException);
 
 /**
  * RPC call to generate a payment disclosure
- * NOTE: Disabled in Juno Cash - this is a Sprout-era feature
+ * NOTE: Disabled in Junocash - this is a Sprout-era feature
  */
 UniValue z_getpaymentdisclosure(const UniValue& params, bool fHelp)
 {
-    // Payment disclosure is a Sprout-era feature, not supported in Juno Cash
+    // Payment disclosure is a Sprout-era feature, not supported in Junocash
     if (fHelp)
         throw runtime_error(
             "z_getpaymentdisclosure\n"
-            "\nNot supported in Juno Cash.\n"
-            "This is a Sprout-era feature and Juno Cash only supports Orchard.\n"
+            "\nNot supported in Junocash.\n"
+            "This is a Sprout-era feature and Junocash only supports Orchard.\n"
         );
 
     throw JSONRPCError(RPC_INVALID_REQUEST,
-        "z_getpaymentdisclosure is not supported in Juno Cash. "
-        "This is a Sprout-era feature and Juno Cash only supports Orchard.");
+        "z_getpaymentdisclosure is not supported in Junocash. "
+        "This is a Sprout-era feature and Junocash only supports Orchard.");
 
     // Original code disabled
     if (false) {
@@ -159,21 +159,21 @@ UniValue z_getpaymentdisclosure(const UniValue& params, bool fHelp)
 
 /**
  * RPC call to validate a payment disclosure data blob.
- * NOTE: Disabled in Juno Cash - this is a Sprout-era feature
+ * NOTE: Disabled in Junocash - this is a Sprout-era feature
  */
 UniValue z_validatepaymentdisclosure(const UniValue& params, bool fHelp)
 {
-    // Payment disclosure is a Sprout-era feature, not supported in Juno Cash
+    // Payment disclosure is a Sprout-era feature, not supported in Junocash
     if (fHelp)
         throw runtime_error(
             "z_validatepaymentdisclosure\n"
-            "\nNot supported in Juno Cash.\n"
-            "This is a Sprout-era feature and Juno Cash only supports Orchard.\n"
+            "\nNot supported in Junocash.\n"
+            "This is a Sprout-era feature and Junocash only supports Orchard.\n"
         );
 
     throw JSONRPCError(RPC_INVALID_REQUEST,
-        "z_validatepaymentdisclosure is not supported in Juno Cash. "
-        "This is a Sprout-era feature and Juno Cash only supports Orchard.");
+        "z_validatepaymentdisclosure is not supported in Junocash. "
+        "This is a Sprout-era feature and Junocash only supports Orchard.");
 
     // Original code disabled
     if (false) {

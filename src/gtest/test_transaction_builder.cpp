@@ -20,7 +20,7 @@
 
 TEST(TransactionBuilder, TransparentToSapling)
 {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -62,7 +62,7 @@ TEST(TransactionBuilder, TransparentToSapling)
 }
 
 TEST(TransactionBuilder, SaplingToSapling) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -103,7 +103,7 @@ TEST(TransactionBuilder, SaplingToSapling) {
 }
 
 TEST(TransactionBuilder, SaplingToSprout) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -145,7 +145,7 @@ TEST(TransactionBuilder, SaplingToSprout) {
 }
 
 TEST(TransactionBuilder, SproutToSproutAndSapling) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -388,7 +388,7 @@ TEST(TransactionBuilder, RejectsInvalidTransparentOutput)
 
 TEST(TransactionBuilder, FailsWithNegativeChange)
 {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -437,7 +437,7 @@ TEST(TransactionBuilder, FailsWithNegativeChange)
 
 TEST(TransactionBuilder, ChangeOutput)
 {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -523,7 +523,7 @@ TEST(TransactionBuilder, ChangeOutput)
 
 TEST(TransactionBuilder, SetFee)
 {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -575,7 +575,7 @@ TEST(TransactionBuilder, SetFee)
 
 TEST(TransactionBuilder, CheckSaplingTxVersion)
 {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     SelectParams(CBaseChainParams::REGTEST);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
     const Consensus::Params& consensusParams = Params().GetConsensus();

@@ -20,7 +20,7 @@
  * for both junocashd and juno-cli, to make it harder for attackers to
  * target servers or GUI users specifically.
  */
-const std::string CLIENT_NAME("JunoCash");
+const std::string CLIENT_NAME("Junocash");
 
 /**
  * Client version number

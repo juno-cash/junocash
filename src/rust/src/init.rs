@@ -31,7 +31,7 @@ fn rayon_threadpool() {
 /// The sprout_path parameter is kept for API compatibility but is unused on Orchard-only chain.
 fn zksnark_params(_sprout_path: String, load_proving_keys: bool) {
     PROOF_PARAMETERS_LOADED.call_once(|| {
-        // Juno Cash: Orchard-only chain - only load Orchard parameters
+        // Junocash: Orchard-only chain - only load Orchard parameters
         // Sprout and Sapling parameters are not loaded as they are banned at consensus level
 
         // Generate Orchard parameters.

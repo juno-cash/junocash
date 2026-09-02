@@ -1,6 +1,6 @@
 # DMI/SMBIOS Hardware Detection Setup
 
-Juno Cash can display detailed hardware information (CPU model, memory DIMMs, motherboard) by reading DMI/SMBIOS tables. On Linux, these tables require special permissions.
+Junocash can display detailed hardware information (CPU model, memory DIMMs, motherboard) by reading DMI/SMBIOS tables. On Linux, these tables require special permissions.
 
 ## Quick Setup
 
@@ -34,7 +34,7 @@ groups
 
 ## What You'll See
 
-After setup, Juno Cash mining status will display:
+After setup, Junocash mining status will display:
 
 ```
 CPU          AMD Ryzen 9 5950X 16-Core Processor

@@ -177,7 +177,7 @@ TestChain100Setup::CreateAndProcessBlock(const std::vector<CMutableTransaction>&
     unsigned int extraNonce = 0;
     IncrementExtraNonce(pblocktemplate, chainActive.Tip(), extraNonce, chainparams.GetConsensus());
 
-    // Juno Cash: RandomX-based mining for tests
+    // Junocash: RandomX-based mining for tests
     uint64_t blockHeight = chainActive.Height() + 1;
     uint64_t seedHeight = RandomX_SeedHeight(blockHeight);
     uint256 seedHash;

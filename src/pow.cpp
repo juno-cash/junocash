@@ -9,7 +9,7 @@
 #include "arith_uint256.h"
 #include "chain.h"
 #include "chainparams.h"
-// Juno Cash: Legacy Equihash includes - kept for reference
+// Junocash: Legacy Equihash includes - kept for reference
 // #include "crypto/equihash.h"
 #include "crypto/randomx_wrapper.h"
 #include "primitives/block.h"
@@ -18,7 +18,7 @@
 #include "util/system.h"
 
 #include <librustzcash.h>
-// Juno Cash: Legacy Equihash includes - kept for reference
+// Junocash: Legacy Equihash includes - kept for reference
 // #include <rust/equihash.h>
 
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
@@ -108,7 +108,7 @@ unsigned int CalculateNextWorkRequired(arith_uint256 bnAvg,
     return bnNew.GetCompact();
 }
 
-// Juno Cash: Legacy Equihash - kept for reference
+// Junocash: Legacy Equihash - kept for reference
 /*
 bool CheckEquihashSolution(const CBlockHeader *pblock, const Consensus::Params& params)
 {

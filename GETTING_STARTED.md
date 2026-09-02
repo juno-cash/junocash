@@ -1,6 +1,6 @@
-# Juno Cash Documentation
+# Junocash Documentation
 
-Juno Cash is a privacy-focused cryptocurrency using the Orchard shielded protocol.
+Junocash is a privacy-focused cryptocurrency using the Orchard shielded protocol.
 
 ## Components
 
@@ -15,7 +15,7 @@ Run `junocashd` without arguments to launch in interactive mode with a visual da
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                               Juno Cash                                │
+│                               Junocash                                │
 │                         Privacy Money for All                          │
 │                       v0.9.4 - mainnet - RandomX                       │
 └────────────────────────────────────────────────────────────────────────┘
@@ -116,7 +116,7 @@ junocash-cli getbalance
 
 ## Transaction Flow
 
-Juno Cash uses a privacy-preserving transaction flow:
+Junocash uses a privacy-preserving transaction flow:
 
 1. **Mine** → rewards go to a transparent address
 2. **Shield** → move coinbase to an Orchard shielded address

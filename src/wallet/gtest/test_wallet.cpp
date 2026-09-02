@@ -399,7 +399,7 @@ TEST(WalletTests, SetSproutNoteAddrsInCWalletTx) {
 }
 
 TEST(WalletTests, SetSaplingNoteAddrsInCWalletTx) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     std::vector<libzcash::Zip212Enabled> zip_212_enabled = {libzcash::Zip212Enabled::BeforeZip212, libzcash::Zip212Enabled::AfterZip212};
@@ -551,7 +551,7 @@ TEST(WalletTests, GetSproutNoteNullifier) {
 }
 
 TEST(WalletTests, FindMySaplingNotes) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -683,7 +683,7 @@ TEST(WalletTests, GetConflictedSproutNotes) {
 
 // Generate note A and spend to create note B, from which we spend to create two conflicting transactions
 TEST(WalletTests, GetConflictedSaplingNotes) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     std::vector<libzcash::Zip212Enabled> zip_212_enabled = {libzcash::Zip212Enabled::BeforeZip212, libzcash::Zip212Enabled::AfterZip212};
@@ -982,7 +982,7 @@ TEST(WalletTests, SproutNullifierIsSpent) {
 }
 
 TEST(WalletTests, SaplingNullifierIsSpent) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -1070,7 +1070,7 @@ TEST(WalletTests, NavigateFromSproutNullifierToNote) {
 }
 
 TEST(WalletTests, NavigateFromSaplingNullifierToNote) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -1203,7 +1203,7 @@ TEST(WalletTests, SpentSproutNoteIsFromMe) {
 
 // Create note A, spend A to create note B, spend and verify note B is from me.
 TEST(WalletTests, SpentSaplingNoteIsFromMe) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     std::vector<libzcash::Zip212Enabled> zip_212_enabled = {libzcash::Zip212Enabled::BeforeZip212, libzcash::Zip212Enabled::AfterZip212};
@@ -2060,7 +2060,7 @@ TEST(WalletTests, UpdatedSproutNoteData) {
 }
 
 TEST(WalletTests, UpdatedSaplingNoteData) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -2230,7 +2230,7 @@ TEST(WalletTests, MarkAffectedSproutTransactionsDirty) {
 }
 
 TEST(WalletTests, MarkAffectedSaplingTransactionsDirty) {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();

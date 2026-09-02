@@ -495,7 +495,7 @@ struct Params {
     int nTemporaryOrchardDisablingSoftForkHeight = NetworkUpgrade::NO_ACTIVATION_HEIGHT;
 
     /** Proof of work parameters */
-    // Juno Cash: Legacy Equihash parameters removed (uses RandomX instead)
+    // Junocash: Legacy Equihash parameters removed (uses RandomX instead)
     // unsigned int nEquihashN = 0;
     // unsigned int nEquihashK = 0;
     uint256 powLimit;

@@ -806,7 +806,7 @@ class TransactionStrategy {
     PrivacyPolicy requestedLevel;
 
 public:
-    // Juno Cash: Privacy policy disabled - transparent addresses only used for mining
+    // Junocash: Privacy policy disabled - transparent addresses only used for mining
     TransactionStrategy() : requestedLevel(PrivacyPolicy::NoPrivacy) {}
     TransactionStrategy(const TransactionStrategy& strategy) : requestedLevel(strategy.requestedLevel) {}
     TransactionStrategy(PrivacyPolicy privacyPolicy) : requestedLevel(privacyPolicy) {}

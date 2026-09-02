@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2025 Juno Cash developers
+# Copyright (c) 2025 Junocash developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -26,9 +26,9 @@ print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
 # Default values
-APP_NAME="JunoCash"
+APP_NAME="Junocash"
 DMG_NAME=""
-VOLUME_NAME="Juno Cash"
+VOLUME_NAME="Junocash"
 SOURCE_DIR=""
 OUTPUT_DIR="."
 TOOLS_DIR="${REPO_ROOT}/build-tools"
@@ -45,7 +45,7 @@ OPTIONS:
     -o, --output DIR        Output directory for DMG (default: current dir)
     -n, --name NAME         DMG filename without extension (default: auto-generated)
     -v, --version VER       Version string for DMG name
-    -V, --volume NAME       Volume name shown in Finder (default: "Juno Cash")
+    -V, --volume NAME       Volume name shown in Finder (default: "Junocash")
     -h, --help              Show this help
 
 EXAMPLE:
@@ -215,11 +215,11 @@ create_dmg() {
 
     # Create a simple README for macOS users
     cat > "${STAGING}/INSTALL.txt" <<'INSTALLEOF'
-Juno Cash Installation
+Junocash Installation
 ======================
 
 1. Copy the 'bin' folder to a location of your choice
-   (e.g., /Applications/JunoCash or ~/Applications/JunoCash)
+   (e.g., /Applications/Junocash or ~/Applications/Junocash)
 
 2. Add the bin folder to your PATH, or run binaries directly:
 
@@ -265,7 +265,7 @@ INSTALLEOF
 
 # Main
 main() {
-    print_info "Juno Cash DMG Creator"
+    print_info "Junocash DMG Creator"
 
     parse_args "$@"
     check_dependencies

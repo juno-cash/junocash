@@ -24,7 +24,7 @@
 
 static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, const uint256& nNonce, const std::vector<unsigned char>& nSolution, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
-    // Juno Cash: Genesis uses Canopy-era transaction format (v4)
+    // Junocash: Genesis uses Canopy-era transaction format (v4)
     // NU5 (Orchard) activates at block 1 to avoid genesis anchor initialization issues
     CMutableTransaction txNew;
     txNew.fOverwintered = true;
@@ -91,7 +91,7 @@ public:
     CMainParams() {
         keyConstants.strNetworkID = "main";
         strCurrencyUnits = "JUNO";
-        keyConstants.bip44CoinType = 8133; // Juno Cash coin type
+        keyConstants.bip44CoinType = 8133; // Junocash coin type
         consensus.fCoinbaseMustBeShielded = true;
         consensus.nSubsidySlowStartInterval = 20000;
         consensus.nPreBlossomSubsidyHalvingInterval = Consensus::PRE_BLOSSOM_HALVING_INTERVAL;
@@ -99,7 +99,7 @@ public:
         consensus.nMajorityEnforceBlockUpgrade = 750;
         consensus.nMajorityRejectBlockOutdated = 950;
         consensus.nMajorityWindow = 4000;
-        // Juno Cash: Legacy Equihash parameters removed (uses RandomX instead)
+        // Junocash: Legacy Equihash parameters removed (uses RandomX instead)
         // const size_t N = 200, K = 9;
         // static_assert(equihash_parameters_acceptable(N, K));
         // consensus.nEquihashN = N;
@@ -113,7 +113,7 @@ public:
         consensus.nPostBlossomPowTargetSpacing = Consensus::POST_BLOSSOM_POW_TARGET_SPACING;
         consensus.nPowAllowMinDifficultyBlocksAfterHeight = std::nullopt;
         consensus.fPowNoRetargeting = false;
-        // Juno Cash: All consensus upgrades active from genesis (Orchard-only chain)
+        // Junocash: All consensus upgrades active from genesis (Orchard-only chain)
         consensus.vUpgrades[Consensus::BASE_SPROUT].nProtocolVersion = 170002;
         consensus.vUpgrades[Consensus::BASE_SPROUT].nActivationHeight =
             Consensus::NetworkUpgrade::ALWAYS_ACTIVE;
@@ -135,7 +135,7 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_CANOPY].nProtocolVersion = 170013;
         consensus.vUpgrades[Consensus::UPGRADE_CANOPY].nActivationHeight =
             Consensus::NetworkUpgrade::ALWAYS_ACTIVE;
-        // Juno Cash: Delay NU5/NU6 activation to avoid genesis anchor issues
+        // Junocash: Delay NU5/NU6 activation to avoid genesis anchor issues
         // NU5 (Orchard) activates at block 1, not genesis
         consensus.vUpgrades[Consensus::UPGRADE_NU5].nProtocolVersion = 170100;
         consensus.vUpgrades[Consensus::UPGRADE_NU5].nActivationHeight = 1;
@@ -176,13 +176,13 @@ public:
 
         keyConstants.bech32mHRPs[TEX_ADDRESS]                 = "tex";
 
-        // Juno Cash: No funding streams (0% dev tax)
+        // Junocash: No funding streams (0% dev tax)
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000000000a2d4b9e4bdb1");
 
         /**
-         * Network magic bytes for Juno Cash - derived from Bitcoin block 919123 hash
+         * Network magic bytes for Junocash - derived from Bitcoin block 919123 hash
          */
         pchMessageStart[0] = 0xb5;
         pchMessageStart[1] = 0x0c;
@@ -214,7 +214,7 @@ public:
         fMineBlocksOnDemand = false;
         fTestnetToBeDeprecatedFieldRPC = false;
 
-        // Juno Cash: Checkpoint data
+        // Junocash: Checkpoint data
         checkpointData = (CCheckpointData) {
             boost::assign::map_list_of
             (0, consensus.hashGenesisBlock)
@@ -228,7 +228,7 @@ public:
             1500         // estimated number of transactions per day after checkpoint
         };
 
-        // Juno Cash: Reset Sprout value pool checkpoint (no Sprout activity on new chain)
+        // Junocash: Reset Sprout value pool checkpoint (no Sprout activity on new chain)
         nSproutValuePoolCheckpointHeight = 0;
         nSproutValuePoolCheckpointBalance = 0;
         fZIP209Enabled = true;
@@ -247,7 +247,7 @@ public:
         nChainSupplyCheckpointLockboxValue     = 0;
         hashChainSupplyCheckpointBlock = uint256S("000000003b6c6139e41a39f9c02373d3a292ece1550ae3b4119de6804491ac40");
 
-        // Juno Cash: No founders reward (0% dev tax)
+        // Junocash: No founders reward (0% dev tax)
         vFoundersRewardAddress = {};
     }
 };
@@ -269,7 +269,7 @@ public:
         consensus.nMajorityEnforceBlockUpgrade = 51;
         consensus.nMajorityRejectBlockOutdated = 75;
         consensus.nMajorityWindow = 400;
-        // Juno Cash: Legacy Equihash parameters removed (uses RandomX instead)
+        // Junocash: Legacy Equihash parameters removed (uses RandomX instead)
         // const size_t N = 200, K = 9;
         // static_assert(equihash_parameters_acceptable(N, K));
         // consensus.nEquihashN = N;
@@ -289,7 +289,7 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_TESTDUMMY].nProtocolVersion = 170002;
         consensus.vUpgrades[Consensus::UPGRADE_TESTDUMMY].nActivationHeight =
             Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
-        // Juno Cash: All consensus upgrades active from genesis (Orchard-only chain)
+        // Junocash: All consensus upgrades active from genesis (Orchard-only chain)
         consensus.vUpgrades[Consensus::UPGRADE_OVERWINTER].nProtocolVersion = 170003;
         consensus.vUpgrades[Consensus::UPGRADE_OVERWINTER].nActivationHeight =
             Consensus::NetworkUpgrade::ALWAYS_ACTIVE;
@@ -347,7 +347,7 @@ public:
 
         keyConstants.bech32mHRPs[TEX_ADDRESS]                 = "textest";
 
-        // Juno Cash: No funding streams (0% dev tax)
+        // Junocash: No funding streams (0% dev tax)
 
         // On testnet we activate this rule 6 blocks after Blossom activation. From block 299188 and
         // prior to Blossom activation, the testnet minimum-difficulty threshold was 15 minutes (i.e.
@@ -412,7 +412,7 @@ public:
             1000         // estimated number of transactions per day after checkpoint
         };
 
-        // Juno Cash: Reset Sprout value pool checkpoint (no Sprout activity on new chain)
+        // Junocash: Reset Sprout value pool checkpoint (no Sprout activity on new chain)
         nSproutValuePoolCheckpointHeight = 0;
         nSproutValuePoolCheckpointBalance = 0;
         fZIP209Enabled = true;
@@ -429,7 +429,7 @@ public:
         nChainSupplyCheckpointLockboxValue     = 0;
         hashChainSupplyCheckpointBlock = uint256S("0002517b5072036abc183da6e28591651d1573926a4cef71fa969cae40a174d6");
 
-        // Juno Cash: No founders reward (0% dev tax)
+        // Junocash: No founders reward (0% dev tax)
         vFoundersRewardAddress = {};
     }
 };
@@ -451,7 +451,7 @@ public:
         consensus.nMajorityEnforceBlockUpgrade = 750;
         consensus.nMajorityRejectBlockOutdated = 950;
         consensus.nMajorityWindow = 1000;
-        // Juno Cash: Legacy Equihash parameters removed (uses RandomX instead)
+        // Junocash: Legacy Equihash parameters removed (uses RandomX instead)
         // const size_t N = 48, K = 5;
         // static_assert(equihash_parameters_acceptable(N, K));
         // consensus.nEquihashN = N;
@@ -471,7 +471,7 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_TESTDUMMY].nProtocolVersion = 170002;
         consensus.vUpgrades[Consensus::UPGRADE_TESTDUMMY].nActivationHeight =
             Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
-        // Juno Cash: All consensus upgrades active from genesis (Orchard-only chain)
+        // Junocash: All consensus upgrades active from genesis (Orchard-only chain)
         consensus.vUpgrades[Consensus::UPGRADE_OVERWINTER].nProtocolVersion = 170003;
         consensus.vUpgrades[Consensus::UPGRADE_OVERWINTER].nActivationHeight =
             Consensus::NetworkUpgrade::ALWAYS_ACTIVE;
@@ -555,7 +555,7 @@ public:
         fMineBlocksOnDemand = true;
         fTestnetToBeDeprecatedFieldRPC = false;
 
-        // Juno Cash: Use genesis hash for regtest checkpoint
+        // Junocash: Use genesis hash for regtest checkpoint
         checkpointData = (CCheckpointData){
             boost::assign::map_list_of
             (0, consensus.hashGenesisBlock),
@@ -564,7 +564,7 @@ public:
             0
         };
 
-        // Juno Cash: No founders reward (0% dev tax)
+        // Junocash: No founders reward (0% dev tax)
         vFoundersRewardAddress = {};
     }
 

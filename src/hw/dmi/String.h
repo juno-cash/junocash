@@ -1,6 +1,6 @@
-/* Juno Cash - String wrapper for DMI code
+/* Junocash - String wrapper for DMI code
  * Adapted from XMRig's String class to use std::string
- * Copyright (c) 2025 Juno Cash developers
+ * Copyright (c) 2025 Junocash developers
  * Copyright (c) 2018-2021 XMRig <https://github.com/xmrig>
  *
  *   This program is free software: you can redistribute it and/or modify

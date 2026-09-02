@@ -1,7 +1,7 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Copyright (c) 2016-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -178,18 +178,18 @@ UniValue getnewaddress(const UniValue& params, bool fHelp)
             "getnewaddress ( \"\" )\n"
             + Deprecated(fEnableGetNewAddress,
                          "getnewaddress",
-                         "In Juno Cash, transparent addresses are only used for mining.\n"
+                         "In Junocash, transparent addresses are only used for mining.\n"
                          "Use t_getminingaddress to get your mining address.\n"
                          "For receiving funds, use z_getnewaccount and z_getaddressforaccount to create shielded addresses.") +
-            "\nReturns a new transparent Juno Cash address.\n"
-            "In Juno Cash, transparent addresses are only used for mining coinbase rewards.\n"
+            "\nReturns a new transparent Junocash address.\n"
+            "In Junocash, transparent addresses are only used for mining coinbase rewards.\n"
             "Mined coins must be shielded using z_shieldcoinbase before they can be spent.\n"
 
             "\nArguments:\n"
             "1. (dummy)       (string, optional) DEPRECATED. If provided, it MUST be set to the empty string \"\". Passing any other string will result in an error.\n"
 
             "\nResult:\n"
-            "\"junocashaddress\"    (string) The new transparent Juno Cash address\n"
+            "\"junocashaddress\"    (string) The new transparent Junocash address\n"
 
             "\nExamples:\n"
             + HelpExampleCli("getnewaddress", "")
@@ -228,7 +228,7 @@ UniValue t_getminingaddress(const UniValue& params, bool fHelp)
         throw runtime_error(
             "t_getminingaddress\n"
             "\nReturns a new transparent address for mining.\n"
-            "\nIn Juno Cash, coinbases are mined to transparent addresses and then\n"
+            "\nIn Junocash, coinbases are mined to transparent addresses and then\n"
             "shielded to Orchard using z_shieldcoinbase.\n"
             "\nResult:\n"
             "\"address\"    (string) A transparent address (t1...) for use with mineraddress config\n"
@@ -257,7 +257,7 @@ UniValue z_converttex(const UniValue& params, bool fHelp)
     if (fHelp || params.size() < 1 || params.size() > 1)
         throw runtime_error(
             "z_converttex ( \"transparentaddress\" )\n"
-            "\nConverts a transparent Juno Cash address to a TEX address.\n"
+            "\nConverts a transparent Junocash address to a TEX address.\n"
 
             "\nArguments:\n"
             "1. \"transparentaddress\" (string, required) \n"
@@ -294,7 +294,7 @@ UniValue getrawchangeaddress(const UniValue& params, bool fHelp)
                          "getrawchangeaddress",
                          "Change addresses are a wallet-internal feature. Use a unified address\n"
                          "for a dedicated change account instead.") +
-            "\nReturns a new transparent Juno Cash address for receiving change.\n"
+            "\nReturns a new transparent Junocash address for receiving change.\n"
             "This is for use with raw transactions, NOT normal use. Additionally,\n"
             "the resulting address does not correspond to the \"change\" HD derivation\n"
             "path.\n"
@@ -337,7 +337,7 @@ static void SendMoney(const CTxDestination &address, CAmount nValue, bool fSubtr
     if (nValue > curBalance)
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient funds");
 
-    // Parse Juno Cash address
+    // Parse Junocash address
     CScript scriptPubKey = GetScriptForDestination(address);
 
     // Create and send the transaction
@@ -430,7 +430,7 @@ PrivacyPolicy
 InterpretLegacyCompat(const std::optional<PaymentAddress>& sender,
                       const std::set<PaymentAddress>& recipients)
 {
-    // Juno Cash: Privacy policy disabled - transparent addresses only used for mining
+    // Junocash: Privacy policy disabled - transparent addresses only used for mining
     return PrivacyPolicy::NoPrivacy;
 }
 
@@ -461,7 +461,7 @@ UniValue sendtoaddress(const UniValue& params, bool fHelp)
             "used when interoperability with legacy Bitcoin infrastructure is required.\n"
             + HelpRequiringPassphrase() +
             "\nArguments:\n"
-            "1. \"junocashaddress\"  (string, required) The transparent Juno Cash address to send to.\n"
+            "1. \"junocashaddress\"  (string, required) The transparent Junocash address to send to.\n"
             "2. \"amount\"      (numeric, required) The amount in " + CURRENCY_UNIT + " to send. eg 0.1\n"
             "3. \"comment\"     (string, optional) A comment used to store what the transaction is for. \n"
             "                             This is not part of the transaction, just kept in your wallet.\n"
@@ -469,7 +469,7 @@ UniValue sendtoaddress(const UniValue& params, bool fHelp)
             "                             to which you're sending the transaction. This is not part of the \n"
             "                             transaction, just kept in your wallet.\n"
             "5. subtractfeefromamount  (boolean, optional, default=false) The fee will be deducted from the amount being sent.\n"
-            "                             The recipient will receive less Juno Cash than you enter in the amount field.\n"
+            "                             The recipient will receive less Junocash than you enter in the amount field.\n"
             "\nResult:\n"
             "\"transactionid\"  (string) The transaction id.\n"
             "\nExamples:\n"
@@ -1129,9 +1129,9 @@ UniValue getreceivedbyaddress(const UniValue& params, bool fHelp)
     if (fHelp || params.size() < 1 || params.size() > 4)
         throw runtime_error(
             "getreceivedbyaddress \"junocashaddress\" ( minconf inZat asOfHeight )\n"
-            "\nReturns the total amount received by the given transparent Juno Cash address in transactions with at least minconf confirmations.\n"
+            "\nReturns the total amount received by the given transparent Junocash address in transactions with at least minconf confirmations.\n"
             "\nArguments:\n"
-            "1. \"junocashaddress\"  (string, required) The Juno Cash address for transactions.\n"
+            "1. \"junocashaddress\"  (string, required) The Junocash address for transactions.\n"
             "2. minconf         (numeric, optional, default=1) Only include transactions confirmed at least this many times.\n"
             "3. inZat           (bool, optional, default=false) Get the result amount in " + MINOR_CURRENCY_UNIT + " (as an integer).\n"
             "4. " + asOfHeightMessage(true) +
@@ -1282,14 +1282,14 @@ UniValue sendmany(const UniValue& params, bool fHelp)
             "1. \"dummy\"               (string, required) Must be set to \"\" for backwards compatibility.\n"
             "2. \"amounts\"             (string, required) A json object with addresses and amounts\n"
             "    {\n"
-            "      \"address\":amount   (numeric) The Juno Cash address is the key, the numeric amount in " + CURRENCY_UNIT + " is the value\n"
+            "      \"address\":amount   (numeric) The Junocash address is the key, the numeric amount in " + CURRENCY_UNIT + " is the value\n"
             "      ,...\n"
             "    }\n"
             "3. minconf                 (numeric, optional, default=1) Only use the balance confirmed at least this many times.\n"
             "4. \"comment\"             (string, optional) A comment\n"
             "5. subtractfeefromamount   (string, optional) A json array with addresses.\n"
             "                           The fee will be equally deducted from the amount of each selected address.\n"
-            "                           Those recipients will receive less Juno Cash than you enter in their corresponding amount field.\n"
+            "                           Those recipients will receive less Junocash than you enter in their corresponding amount field.\n"
             "                           If no addresses are specified here, the sender pays the fee.\n"
             "    [\n"
             "      \"address\"            (string) Subtract fee from this address\n"
@@ -1398,19 +1398,19 @@ UniValue addmultisigaddress(const UniValue& params, bool fHelp)
     {
         string msg = "addmultisigaddress nrequired [\"key\",...] ( \"\" )\n"
             "\nAdd a nrequired-to-sign transparent multisignature address to the wallet.\n"
-            "Each key is a transparent Juno Cash address or hex-encoded secp256k1 public key.\n"
+            "Each key is a transparent Junocash address or hex-encoded secp256k1 public key.\n"
 
             "\nArguments:\n"
             "1. nrequired        (numeric, required) The number of required signatures out of the n keys or addresses.\n"
-            "2. \"keysobject\"   (string, required) A json array of Juno Cash addresses or hex-encoded public keys\n"
+            "2. \"keysobject\"   (string, required) A json array of Junocash addresses or hex-encoded public keys\n"
             "     [\n"
-            "       \"address\"  (string) Juno Cash address or hex-encoded public key\n"
+            "       \"address\"  (string) Junocash address or hex-encoded public key\n"
             "       ...,\n"
             "     ]\n"
             "3. (dummy)        (string, optional) DEPRECATED. If provided, MUST be set to the empty string \"\"."
 
             "\nResult:\n"
-            "\"junocashaddress\"  (string) A Juno Cash address associated with the keys.\n"
+            "\"junocashaddress\"  (string) A Junocash address associated with the keys.\n"
 
             "\nExamples:\n"
             "\nAdd a multisig address from 2 addresses\n"
@@ -1709,7 +1709,7 @@ UniValue listtransactions(const UniValue& params, bool fHelp)
             "\nResult:\n"
             "[\n"
             "  {\n"
-            "    \"address\":\"junocashaddress\",    (string) The Juno Cash address of the transaction. Not present for \n"
+            "    \"address\":\"junocashaddress\",    (string) The Junocash address of the transaction. Not present for \n"
             "                                                move transactions (category = move).\n"
             "    \"category\":\"send|receive\",   (string) The transaction category. 'send' and 'receive' transactions are \n"
             "                                              associated with an address, transaction id and block details\n"
@@ -1831,7 +1831,7 @@ UniValue listsinceblock(const UniValue& params, bool fHelp)
             "\nResult:\n"
             "{\n"
             "  \"transactions\": [\n"
-            "    \"address\":\"junocashaddress\",    (string) The Juno Cash address of the transaction. Not present for move transactions (category = move).\n"
+            "    \"address\":\"junocashaddress\",    (string) The Junocash address of the transaction. Not present for move transactions (category = move).\n"
             "    \"category\":\"send|receive\",     (string) The transaction category. 'send' has negative amounts, 'receive' has positive amounts.\n"
             "    \"status\" : \"mined|waiting|expiringsoon|expired\",    (string) The transaction status, can be 'mined', 'waiting', 'expiringsoon' \n"
             "                                                                    or 'expired'. Available for 'send' and 'receive' category of transactions.\n"
@@ -1960,7 +1960,7 @@ UniValue gettransaction(const UniValue& params, bool fHelp)
             "  \"timereceived\" : ttt,    (numeric) The time received in seconds since epoch (1 Jan 1970 GMT)\n"
             "  \"details\" : [\n"
             "    {\n"
-            "      \"address\" : \"junocashaddress\",   (string) The Juno Cash address involved in the transaction\n"
+            "      \"address\" : \"junocashaddress\",   (string) The Junocash address involved in the transaction\n"
             "      \"category\" : \"send|receive\",    (string) The category, either 'send' or 'receive'\n"
             "      \"amount\" : x.xxx                  (numeric) The amount in " + CURRENCY_UNIT + "\n"
             "      \"amountZat\" : x                   (numeric) The amount in " + MINOR_CURRENCY_UNIT + "\n"
@@ -2137,7 +2137,7 @@ UniValue walletpassphrase(const UniValue& params, bool fHelp)
             "walletpassphrase \"passphrase\" timeout\n"
             "\nStores the wallet decryption key in memory for 'timeout' seconds.\n"
             "If the wallet is locked, this API must be invoked prior to performing operations\n"
-            "that require the availability of private keys, such as sending Juno Cash.\n"
+            "that require the availability of private keys, such as sending Junocash.\n"
             "junocashd wallet encryption is experimental, and should be used with caution.\n"
             "\nArguments:\n"
             "1. \"passphrase\"     (string, required) The wallet passphrase\n"
@@ -2341,7 +2341,7 @@ UniValue encryptwallet(const UniValue& params, bool fHelp)
             "\nExamples:\n"
             "\nEncrypt you wallet\n"
             + HelpExampleCli("encryptwallet", "\"my pass phrase\"") +
-            "\nNow set the passphrase to use the wallet, such as for signing or sending Juno Cash\n"
+            "\nNow set the passphrase to use the wallet, such as for signing or sending Junocash\n"
             + HelpExampleCli("walletpassphrase", "\"my pass phrase\"") +
             "\nNow we can so something like sign\n"
             + HelpExampleCli("signmessage", "\"junocashaddress\" \"test message\"") +
@@ -2379,7 +2379,7 @@ UniValue encryptwallet(const UniValue& params, bool fHelp)
     // slack space in .dat files; that is bad if the old data is
     // unencrypted private keys. So:
     StartShutdown();
-    return "wallet encrypted; Juno Cash server stopping, restart to run with encrypted wallet. The keypool has been flushed, you need to make a new backup.";
+    return "wallet encrypted; Junocash server stopping, restart to run with encrypted wallet. The keypool has been flushed, you need to make a new backup.";
 }
 
 UniValue lockunspent(const UniValue& params, bool fHelp)
@@ -2392,7 +2392,7 @@ UniValue lockunspent(const UniValue& params, bool fHelp)
             "lockunspent unlock [{\"txid\":\"txid\",\"vout\":n},...]\n"
             "\nUpdates list of temporarily unspendable outputs.\n"
             "Temporarily lock (unlock=false) or unlock (unlock=true) specified transparent transaction outputs.\n"
-            "A locked transaction output will not be chosen by automatic coin selection, when spending Juno Cash.\n"
+            "A locked transaction output will not be chosen by automatic coin selection, when spending Junocash.\n"
             "Locks are stored in memory only. Nodes start with zero locked outputs, and the locked output list\n"
             "is always cleared (by virtue of process exit) when a node stops or fails.\n"
             "Also see the listunspent call\n"
@@ -2657,9 +2657,9 @@ UniValue listunspent(const UniValue& params, bool fHelp)
             "\nArguments:\n"
             "1. minconf          (numeric, optional, default=1) The minimum confirmations to filter\n"
             "2. maxconf          (numeric, optional, default=9999999) The maximum confirmations to filter\n"
-            "3. \"addresses\"    (string) A json array of Juno Cash addresses to filter\n"
+            "3. \"addresses\"    (string) A json array of Junocash addresses to filter\n"
             "    [\n"
-            "      \"address\"   (string) Juno Cash address\n"
+            "      \"address\"   (string) Junocash address\n"
             "      ,...\n"
             "    ]\n"
             "4. includeUnsafe    (bool, optional, default=true) Include outputs that are not safe to spend. Currently, only the default value is supported.\n"
@@ -2671,7 +2671,7 @@ UniValue listunspent(const UniValue& params, bool fHelp)
             "    \"txid\" : \"txid\",          (string) the transaction id \n"
             "    \"vout\" : n,               (numeric) the vout value\n"
             "    \"generated\" : true|false  (boolean) true if txout is a coinbase transaction output\n"
-            "    \"address\" : \"address\",    (string) the Juno Cash address\n"
+            "    \"address\" : \"address\",    (string) the Junocash address\n"
             "    \"scriptPubKey\" : \"key\",   (string) the script key\n"
             "    \"amount\" : x.xxx,         (numeric) the transaction amount in " + CURRENCY_UNIT + "\n"
             "    \"amountZat\" : xxxx        (numeric) the transaction amount in " + MINOR_CURRENCY_UNIT + "\n"
@@ -2707,7 +2707,7 @@ UniValue listunspent(const UniValue& params, bool fHelp)
             auto destStr = inputs[idx].get_str();
             CTxDestination dest = keyIO.DecodeDestination(destStr);
             if (!IsValidDestination(dest)) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Juno Cash transparent address: ") + destStr);
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Junocash transparent address: ") + destStr);
             }
             if (!destinations.insert(dest).second) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, std::string("Invalid parameter, duplicated address: ") + destStr);
@@ -2860,7 +2860,7 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
 
             auto zaddr = keyIO.DecodePaymentAddress(o.get_str());
             if (!zaddr.has_value()) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, string("Invalid parameter, not a valid Juno Cash address: ") + o.get_str());
+                throw JSONRPCError(RPC_INVALID_PARAMETER, string("Invalid parameter, not a valid Junocash address: ") + o.get_str());
             }
 
             sourceAddrs.push_back(zaddr.value());
@@ -4343,7 +4343,7 @@ UniValue z_viewtransaction(const UniValue& params, bool fHelp)
             "      \"jsOutputPrev\" : n,             (numeric, sprout) the index of the output within the JSDescription\n"
             "      \"outputPrev\" : n,               (numeric, sapling) the index of the output within the vShieldedOutput\n"
             "      \"actionPrev\" : n,               (numeric, orchard) the index of the action within the orchard bundle\n"
-            "      \"address\" : \"junocashaddress\",     (string) The Juno Cash address involved in the transaction\n"
+            "      \"address\" : \"junocashaddress\",     (string) The Junocash address involved in the transaction\n"
             "      \"value\" : x.xxx                 (numeric) The amount in " + CURRENCY_UNIT + "\n"
             "      \"valueZat\" : xxxx               (numeric) The amount in " + MINOR_CURRENCY_UNIT + "\n"
             "    }\n"
@@ -4357,7 +4357,7 @@ UniValue z_viewtransaction(const UniValue& params, bool fHelp)
             "      \"jsOutput\" : n,                 (numeric, sprout) the index of the output within the JSDescription\n"
             "      \"output\" : n,                   (numeric, sapling) the index of the output within the vShieldedOutput\n"
             "      \"action\" : n,                   (numeric, orchard) the index of the action within the orchard bundle\n"
-            "      \"address\" : \"junocashaddress\",     (string) The Juno Cash address involved in the transaction. Not included for change outputs.\n"
+            "      \"address\" : \"junocashaddress\",     (string) The Junocash address involved in the transaction. Not included for change outputs.\n"
             "      \"outgoing\" : true|false         (boolean) True if the output is not for an address in the wallet\n"
             "      \"walletInternal\" : true|false   (boolean) True if this is a change output.\n"
             "      \"value\" : x.xxx                 (numeric) The amount in " + CURRENCY_UNIT + "\n"
@@ -5003,7 +5003,7 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
         }
     }
 
-    // Juno Cash: Privacy policy disabled - transparent addresses only used for mining
+    // Junocash: Privacy policy disabled - transparent addresses only used for mining
     auto strategy = TransactionStrategy(PrivacyPolicy::NoPrivacy);
 
     auto ztxoSelector = [&]() {
@@ -5215,31 +5215,31 @@ UniValue z_send(const UniValue& params, bool fHelp)
 }
 
 UniValue z_setmigration(const UniValue& params, bool fHelp) {
-    // Sprout to Sapling migration is not supported in Juno Cash
+    // Sprout to Sapling migration is not supported in Junocash
     if (fHelp)
         throw runtime_error(
             "z_setmigration\n"
-            "\nNot supported in Juno Cash.\n"
-            "Juno Cash does not support Sprout or Sapling transactions.\n"
+            "\nNot supported in Junocash.\n"
+            "Junocash does not support Sprout or Sapling transactions.\n"
         );
 
     throw JSONRPCError(RPC_INVALID_REQUEST,
-        "z_setmigration is not supported in Juno Cash. "
-        "Juno Cash does not support Sprout or Sapling transactions.");
+        "z_setmigration is not supported in Junocash. "
+        "Junocash does not support Sprout or Sapling transactions.");
 }
 
 UniValue z_getmigrationstatus(const UniValue& params, bool fHelp) {
-    // Sprout to Sapling migration is not supported in Juno Cash
+    // Sprout to Sapling migration is not supported in Junocash
     if (fHelp)
         throw runtime_error(
             "z_getmigrationstatus\n"
-            "\nNot supported in Juno Cash.\n"
-            "Juno Cash does not support Sprout or Sapling transactions.\n"
+            "\nNot supported in Junocash.\n"
+            "Junocash does not support Sprout or Sapling transactions.\n"
         );
 
     throw JSONRPCError(RPC_INVALID_REQUEST,
-        "z_getmigrationstatus is not supported in Juno Cash. "
-        "Juno Cash does not support Sprout or Sapling transactions.");
+        "z_getmigrationstatus is not supported in Junocash. "
+        "Junocash does not support Sprout or Sapling transactions.");
 
     // Original code disabled - kept for reference during code maintenance
     if (false) {
@@ -5407,7 +5407,7 @@ UniValue z_shieldcoinbase(const UniValue& params, bool fHelp)
         memo = ParseMemo(params[4]);
     }
 
-    // Juno Cash: Privacy policy disabled - transparent addresses only used for mining
+    // Junocash: Privacy policy disabled - transparent addresses only used for mining
     auto strategy = TransactionStrategy(PrivacyPolicy::NoPrivacy);
 
     // Validate the from address
@@ -5914,7 +5914,7 @@ UniValue z_mergetoaddress(const UniValue& params, bool fHelp)
         contextInfo.pushKV("fee", ValueFromAmount(nFee.value()));
     }
 
-    // Juno Cash: Privacy policy disabled - transparent addresses only used for mining
+    // Junocash: Privacy policy disabled - transparent addresses only used for mining
     auto strategy = TransactionStrategy(PrivacyPolicy::NoPrivacy);
 
     WalletTxBuilder builder(Params(), minRelayTxFee);
@@ -6166,7 +6166,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "z_importwallet",           &z_importwallet,           true  },
     { "wallet",             "z_viewtransaction",        &z_viewtransaction,        false },
     { "wallet",             "z_getnotescount",          &z_getnotescount,          false },
-    // Sprout-era features disabled in Juno Cash
+    // Sprout-era features disabled in Junocash
     { "hidden",             "z_getpaymentdisclosure",   &z_getpaymentdisclosure,   true  },
     { "hidden",             "z_validatepaymentdisclosure", &z_validatepaymentdisclosure, true }
 };

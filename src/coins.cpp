@@ -128,7 +128,7 @@ CCoinsMap::const_iterator CCoinsViewCache::FetchCoins(const uint256 &txid) const
 
 
 bool CCoinsViewCache::GetSproutAnchorAt(const uint256 &rt, SproutMerkleTree &tree) const {
-    // Juno Cash: Handle empty_root specially before checking cache.
+    // Junocash: Handle empty_root specially before checking cache.
     // This prevents assertion failures when PopAnchor incorrectly marks
     // empty_root as entered=false in the cache (which can happen if
     // hashFinalSproutRoot is null instead of empty_root on a block index).
@@ -161,7 +161,7 @@ bool CCoinsViewCache::GetSproutAnchorAt(const uint256 &rt, SproutMerkleTree &tre
 }
 
 bool CCoinsViewCache::GetSaplingAnchorAt(const uint256 &rt, SaplingMerkleTree &tree) const {
-    // Juno Cash: Handle empty_root specially before checking cache.
+    // Junocash: Handle empty_root specially before checking cache.
     // This prevents assertion failures when PopAnchor incorrectly marks
     // empty_root as entered=false in the cache (which can happen if
     // hashFinalSaplingRoot is null instead of empty_root on a block index).
@@ -194,7 +194,7 @@ bool CCoinsViewCache::GetSaplingAnchorAt(const uint256 &rt, SaplingMerkleTree &t
 }
 
 bool CCoinsViewCache::GetOrchardAnchorAt(const uint256 &rt, OrchardMerkleFrontier &tree) const {
-    // Juno Cash: Handle empty_root specially before checking cache.
+    // Junocash: Handle empty_root specially before checking cache.
     // This prevents assertion failures when PopAnchor incorrectly marks
     // empty_root as entered=false in the cache (which can happen if
     // hashFinalOrchardRoot is null instead of empty_root on a block index).
@@ -335,14 +335,14 @@ void CCoinsViewCache::AbstractPushAnchor(
         }
     }
 
-    // Juno Cash: Always update the hash reference, even when currentRoot == newrt.
+    // Junocash: Always update the hash reference, even when currentRoot == newrt.
     // This is critical for ALWAYS_ACTIVE network upgrades at genesis.
     //
     // In Zcash, network upgrades (like NU5/Orchard) activate at specific heights
     // long after genesis, so the first PushAnchor call for a new pool type always
     // has currentRoot != newrt (currentRoot is null/uninitialized, newrt is empty_root).
     //
-    // In Juno Cash, all upgrades are ALWAYS_ACTIVE from genesis (height 0). This means:
+    // In Junocash, all upgrades are ALWAYS_ACTIVE from genesis (height 0). This means:
     //   - Genesis block calls PushAnchor(orchard_tree) with empty_root
     //   - Block 1 calls PushAnchor(orchard_tree) again, still with empty_root (no shielded txs)
     //   - The condition (currentRoot != newrt) fails because both are empty_root
@@ -391,7 +391,7 @@ void CCoinsViewCache::BringBestAnchorIntoCache(
     SproutMerkleTree &tree
 )
 {
-    // Juno Cash: Sprout transactions are banned by consensus, so the Sprout tree
+    // Junocash: Sprout transactions are banned by consensus, so the Sprout tree
     // always stays at empty_root. Skip assertion if anchor not found.
     GetSproutAnchorAt(currentRoot, tree);
 }
@@ -402,7 +402,7 @@ void CCoinsViewCache::BringBestAnchorIntoCache(
     SaplingMerkleTree &tree
 )
 {
-    // Juno Cash: Sapling transactions are banned by consensus, so the Sapling tree
+    // Junocash: Sapling transactions are banned by consensus, so the Sapling tree
     // always stays at empty_root. Skip assertion if anchor not found.
     GetSaplingAnchorAt(currentRoot, tree);
 }
@@ -413,7 +413,7 @@ void CCoinsViewCache::BringBestAnchorIntoCache(
     OrchardMerkleFrontier &tree
 )
 {
-    // Juno Cash: Blocks without Orchard transactions don't change the Orchard tree,
+    // Junocash: Blocks without Orchard transactions don't change the Orchard tree,
     // so anchors may not be in the database. Skip assertion if anchor not found.
     GetOrchardAnchorAt(currentRoot, tree);
 }

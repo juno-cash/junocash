@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2013 The Bitcoin Core developers
 // Copyright (c) 2016-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -77,7 +77,7 @@ bool AppInit(int argc, char* argv[])
     // Process help and version before taking care about datadir
     if (mapArgs.count("-?") || mapArgs.count("-h") ||  mapArgs.count("-help") || mapArgs.count("-version"))
     {
-        std::string strUsage = _("Juno Cash Daemon") + " " + _("version") + " " + FormatFullVersion() + "\n" + PrivacyInfo();
+        std::string strUsage = _("Junocash Daemon") + " " + _("version") + " " + FormatFullVersion() + "\n" + PrivacyInfo();
 
         if (mapArgs.count("-version"))
         {
@@ -86,7 +86,7 @@ bool AppInit(int argc, char* argv[])
         else
         {
             strUsage += "\n" + _("Usage:") + "\n" +
-                  "  junocashd [options]                     " + _("Start Juno Cash Daemon") + "\n";
+                  "  junocashd [options]                     " + _("Start Junocash Daemon") + "\n";
 
             strUsage += "\n" + HelpMessage(HMM_BITCOIND);
         }
@@ -117,7 +117,7 @@ bool AppInit(int argc, char* argv[])
                    "\n"
                    "You can look at the example configuration file for suggestions of default\n"
                    "options that you may want to change. It should be in one of these locations,\n"
-                   "depending on how you installed Juno Cash:\n") +
+                   "depending on how you installed Junocash:\n") +
                  _("- Source code:  %s%s\n"
                    "- .deb package: %s%s\n")).c_str(),
                 GetConfigFile(confFilename).string().c_str(),
@@ -160,7 +160,7 @@ bool AppInit(int argc, char* argv[])
         fDaemon = GetBoolArg("-daemon", false);
         if (fDaemon)
         {
-            fprintf(stdout, "Juno Cash server starting\n");
+            fprintf(stdout, "Junocash server starting\n");
 
             // Daemonize
             pid_t pid = fork();

@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Copyright (c) 2016-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -339,7 +339,7 @@ std::string HelpMessage(HelpMessageMode mode)
 #endif
     }
     strUsage += HelpMessageOpt("-datadir=<dir>", _("Specify data directory (this path cannot use '~')"));
-    strUsage += HelpMessageOpt("-paramsdir=<dir>", _("Specify Juno Cash network parameters directory"));
+    strUsage += HelpMessageOpt("-paramsdir=<dir>", _("Specify Junocash network parameters directory"));
     strUsage += HelpMessageOpt("-dbcache=<n>", strprintf(_("Set database cache size in megabytes (%d to %d, default: %d)"), nMinDbCache, nMaxDbCache, nDefaultDbCache));
     strUsage += HelpMessageOpt("-debuglogfile=<file>", strprintf(_("Specify location of debug log file. Relative paths will be prefixed by a net-specific datadir location. (default: %s)"), DEFAULT_DEBUGLOGFILE));
     strUsage += HelpMessageOpt("-exportdir=<dir>", _("Specify directory to be used when exporting data"));
@@ -997,7 +997,7 @@ void InitLogging()
         fLogTimestamps);
 
     LogPrintf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
-    LogPrintf("Juno Cash version %s\n", FormatFullVersion());
+    LogPrintf("Junocash version %s\n", FormatFullVersion());
 }
 
 [[noreturn]] static void new_handler_terminate()
@@ -1440,7 +1440,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         auto addr = keyIO.DecodePaymentAddress(mapArgs["-mineraddress"]);
         if (!addr.has_value()) {
             return InitError(strprintf(
-                _("Invalid address for -mineraddress=<addr>: Unable to parse '%s' as a Juno Cash address.)"),
+                _("Invalid address for -mineraddress=<addr>: Unable to parse '%s' as a Junocash address.)"),
                 mapArgs["-mineraddress"]));
         }
         // Reject Unified Addresses - they no longer support transparent receivers
@@ -1474,7 +1474,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         auto addr = keyIO.DecodePaymentAddress(mapArgs["-donationaddress"]);
         if (!addr.has_value()) {
             return InitError(strprintf(
-                _("Invalid address for -donationaddress=<addr>: Unable to parse '%s' as a Juno Cash address."),
+                _("Invalid address for -donationaddress=<addr>: Unable to parse '%s' as a Junocash address."),
                 mapArgs["-donationaddress"]));
         }
         // Donation address must be transparent P2PKH
@@ -1500,7 +1500,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     // Sanity check
     if (!InitSanityCheck())
-        return InitError(_("Initialization sanity check failed. Juno Cash is shutting down."));
+        return InitError(_("Initialization sanity check failed. Junocash is shutting down."));
 
     std::string strDataDir = GetDataDir().string();
 
@@ -1512,9 +1512,9 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     try {
         static boost::interprocess::file_lock lock(pathLockFile.string().c_str());
         if (!lock.try_lock())
-            return InitError(strprintf(_("Cannot obtain a lock on data directory %s. Juno Cash is probably already running."), strDataDir));
+            return InitError(strprintf(_("Cannot obtain a lock on data directory %s. Junocash is probably already running."), strDataDir));
     } catch(const boost::interprocess::interprocess_exception& e) {
-        return InitError(strprintf(_("Cannot obtain a lock on data directory %s. Juno Cash is probably already running.") + " %s.", strDataDir, e.what()));
+        return InitError(strprintf(_("Cannot obtain a lock on data directory %s. Junocash is probably already running.") + " %s.", strDataDir, e.what()));
     }
 
 #ifndef WIN32
@@ -1819,7 +1819,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                         CleanupBlockRevFiles();
                 }
 
-                // Juno Cash: Initialize RandomX before loading block index
+                // Junocash: Initialize RandomX before loading block index
                 // This is required for PoW validation during LoadBlockIndex
                 // Auto-enable fast mode for miners unless explicitly disabled
                 bool miningEnabled = GetBoolArg("-gen", false);
@@ -2011,10 +2011,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 #ifdef ENABLE_MINING
  #ifndef ENABLE_WALLET
     if (GetBoolArg("-minetolocalwallet", false)) {
-        return InitError(_("Juno Cash was not built with wallet support. Set -minetolocalwallet=0 to use -mineraddress, or rebuild Juno Cash with wallet support."));
+        return InitError(_("Junocash was not built with wallet support. Set -minetolocalwallet=0 to use -mineraddress, or rebuild Junocash with wallet support."));
     }
     if (GetArg("-mineraddress", "").empty() && GetBoolArg("-gen", false)) {
-        return InitError(_("Juno Cash was not built with wallet support. Set -mineraddress, or rebuild Juno Cash with wallet support."));
+        return InitError(_("Junocash was not built with wallet support. Set -mineraddress, or rebuild Junocash with wallet support."));
     }
  #else // ENABLE_WALLET
     // If -mineraddress is NOT PRESENT (not even empty), use the wallet's default address

@@ -16,8 +16,8 @@ BEGIN
     BEGIN
         BLOCK "040904E4" // U.S. English - multilingual (hex)
         BEGIN
-            VALUE "CompanyName",        "Juno Cash"
-            VALUE "FileDescription",    "junocash-tx (CLI Juno Cash transaction editor utility)"
+            VALUE "CompanyName",        "Junocash"
+            VALUE "FileDescription",    "junocash-tx (CLI Junocash transaction editor utility)"
             VALUE "FileVersion",        VER_FILEVERSION_STR
             VALUE "InternalName",       "junocash-tx"
             VALUE "LegalCopyright",     COPYRIGHT_STR

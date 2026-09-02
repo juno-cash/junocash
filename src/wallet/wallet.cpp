@@ -4652,7 +4652,7 @@ std::optional<int> CWallet::ScanForWalletTransactions(
                 }
             }
         } else if (isInitScan && nu5_height.has_value()) {
-            // Juno Cash: NU5 is always active from genesis (height 1), so the original
+            // Junocash: NU5 is always active from genesis (height 1), so the original
             // condition (pindexStart->nHeight < nu5_height) would almost never be true.
             // If there's no Orchard checkpoint and it's an init scan, we need to build
             // the commitment tree from scratch, so always enable updates.

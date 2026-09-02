@@ -1,7 +1,7 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Copyright (c) 2019-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -912,8 +912,8 @@ UniValue gettxout(const UniValue& params, bool fHelp)
             "     \"hex\" : \"hex\",        (string) \n"
             "     \"reqSigs\" : n,          (numeric) Number of required signatures\n"
             "     \"type\" : \"pubkeyhash\", (string) The type, eg pubkeyhash\n"
-            "     \"addresses\" : [          (array of string) array of Juno Cash addresses\n"
-            "        \"junocashaddress\"        (string) Juno Cash address\n"
+            "     \"addresses\" : [          (array of string) array of Junocash addresses\n"
+            "        \"junocashaddress\"        (string) Junocash address\n"
             "        ,...\n"
             "     ]\n"
             "  },\n"
@@ -1712,7 +1712,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         "gettxoutsetinfo",        &gettxoutsetinfo,        true  },
     { "blockchain",         "verifychain",            &verifychain,            true  },
 
-    // insightexplorer (hidden - transparent block deltas not primary use case for Juno Cash)
+    // insightexplorer (hidden - transparent block deltas not primary use case for Junocash)
     { "hidden",             "getblockdeltas",         &getblockdeltas,         false },
     { "hidden",             "getblockhashes",         &getblockhashes,         true  },
 

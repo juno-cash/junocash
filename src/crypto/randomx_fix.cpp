@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Juno Cash developers
+// Copyright (c) 2025 Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 

@@ -158,7 +158,7 @@ namespace Consensus {
     }
 
     int Params::FundingPeriodIndex(int fundingStreamStartHeight, int nHeight) const {
-        // Juno Cash: With all upgrades active from genesis, this assertion can fail during
+        // Junocash: With all upgrades active from genesis, this assertion can fail during
         // early chain initialization. Return 0 if we're before the funding stream starts.
         if (fundingStreamStartHeight > nHeight) {
             return 0;

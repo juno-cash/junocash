@@ -1,7 +1,7 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Copyright (c) 2019-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -13,7 +13,7 @@
 #include "consensus/validation.h"
 #include "core_io.h"
 #ifdef ENABLE_MINING
-// Juno Cash: Legacy Equihash - kept for reference
+// Junocash: Legacy Equihash - kept for reference
 // #include "crypto/equihash.h"
 #include "crypto/randomx_wrapper.h"
 #endif
@@ -218,7 +218,7 @@ UniValue generate(const UniValue& params, bool fHelp)
     }
     unsigned int nExtraNonce = 0;
     UniValue blockHashes(UniValue::VARR);
-    // Juno Cash: Legacy Equihash parameters removed
+    // Junocash: Legacy Equihash parameters removed
     // unsigned int n = Params().GetConsensus().nEquihashN;
     // unsigned int k = Params().GetConsensus().nEquihashK;
     while (nHeight < nHeightEnd)
@@ -622,10 +622,10 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid mode");
 
     if (Params().NetworkIDString() != "regtest" && vNodes.empty())
-        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Juno Cash is not connected!");
+        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Junocash is not connected!");
 
     if (IsInitialBlockDownload(Params().GetConsensus()))
-        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Juno Cash is downloading blocks...");
+        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Junocash is downloading blocks...");
 
     std::optional<MinerAddress> maybeMinerAddress;
     GetMainSignals().AddressForMining(maybeMinerAddress);

@@ -152,7 +152,7 @@ double benchmark_verify_joinsplit(const JSDescription &joinsplit)
 }
 
 #ifdef ENABLE_MINING
-// Juno Cash: Legacy Equihash benchmark (disabled)
+// Junocash: Legacy Equihash benchmark (disabled)
 double benchmark_solve_equihash()
 {
     return 0.0;
@@ -202,7 +202,7 @@ std::vector<double> benchmark_solve_equihash_threaded(int nThreads)
 }
 #endif // ENABLE_MINING
 
-// Juno Cash: Legacy Equihash benchmark (disabled)
+// Junocash: Legacy Equihash benchmark (disabled)
 double benchmark_verify_equihash()
 {
     return 0.0;

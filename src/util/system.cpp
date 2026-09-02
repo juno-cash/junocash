@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Copyright (c) 2015-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -209,7 +209,7 @@ static std::string FormatException(const std::exception* pex, const char* pszThr
     char pszModule[MAX_PATH] = "";
     GetModuleFileNameA(NULL, pszModule, sizeof(pszModule));
 #else
-    const char* pszModule = "Juno Cash";
+    const char* pszModule = "Junocash";
 #endif
     if (pex)
         return strprintf(
@@ -381,7 +381,7 @@ void ReadConfigFile(const std::string& confPath,
         // Create a blank config file with helpful comment
         fs::ofstream outConfig(configPath);
         if (outConfig.good()) {
-            outConfig << "# Juno Cash configuration file\n";
+            outConfig << "# Junocash configuration file\n";
             outConfig << "# For available options, run: junocashd -help\n";
             outConfig << "# Documentation: https://zcash.readthedocs.io/en/latest/rtd_pages/zcash_conf_guide.html\n";
             outConfig << "\n";
@@ -672,7 +672,7 @@ void SetThreadPriority(int nPriority)
 std::string PrivacyInfo()
 {
     return "\n" +
-           FormatParagraph(strprintf(_("In order to ensure you are adequately protecting your privacy when using Juno Cash, please see <%s>."),
+           FormatParagraph(strprintf(_("In order to ensure you are adequately protecting your privacy when using Junocash, please see <%s>."),
                                      "https://z.cash/support/security/")) + "\n";
 }
 
@@ -681,7 +681,7 @@ std::string LicenseInfo()
     return "\n" +
            FormatParagraph(strprintf(_("Copyright (C) 2009-%i The Bitcoin Core Developers"), COPYRIGHT_YEAR)) + "\n" +
            FormatParagraph(strprintf(_("Copyright (C) 2015-%i The Zcash Developers"), COPYRIGHT_YEAR)) + "\n" +
-           FormatParagraph(strprintf(_("Copyright (C) 2025-%i The Juno Cash Developers"), COPYRIGHT_YEAR)) + "\n" +
+           FormatParagraph(strprintf(_("Copyright (C) 2025-%i The Junocash Developers"), COPYRIGHT_YEAR)) + "\n" +
            "\n" +
            FormatParagraph(_("This is experimental software.")) + "\n" +
            "\n" +

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Force MSR modifications for JunoCash RandomX mining
+# Force MSR modifications for Junocash RandomX mining
 # This script directly applies MSR optimizations using wrmsr (from msr-tools).
 # Useful if the internal miner fails to apply MSRs due to permission issues.
 #

@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Copyright (c) 2015-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -916,7 +916,7 @@ bool ContextualCheckTransaction(
 
     auto& orchard_bundle = tx.GetOrchardBundle();
 
-    // Juno Cash: Ban Sprout and Sapling at consensus level (Orchard-only chain)
+    // Junocash: Ban Sprout and Sapling at consensus level (Orchard-only chain)
     if (!tx.vJoinSplit.empty()) {
         return state.DoS(
             DOS_LEVEL_BLOCK,
@@ -930,10 +930,10 @@ bool ContextualCheckTransaction(
             REJECT_INVALID, "bad-txns-sapling-not-supported");
     }
 
-    // Juno Cash: Height-activated fix for value balance sign convention
+    // Junocash: Height-activated fix for value balance sign convention
     const int ORCHARD_TRANSPARENT_LOCK_HEIGHT = 40000;
 
-    // Juno Cash: Ban Orchard-to-transparent transactions (privacy protection)
+    // Junocash: Ban Orchard-to-transparent transactions (privacy protection)
     // If transaction has Orchard actions and transparent outputs with positive value balance
     // (funds leaving Orchard pool to transparent), reject it
     // Note: Positive valueBalance means value is flowing OUT of Orchard (unshielding)
@@ -946,7 +946,7 @@ bool ContextualCheckTransaction(
             REJECT_INVALID, "bad-txns-orchard-to-transparent");
     }
 
-    // Juno Cash: Ban transparent-to-transparent transactions (force shielding)
+    // Junocash: Ban transparent-to-transparent transactions (force shielding)
     // Transparent outputs can only be sent to Orchard, not to other transparent addresses
     // Exception: Coinbase transactions are allowed (miners receive transparent rewards)
     if (nHeight >= ORCHARD_TRANSPARENT_LOCK_HEIGHT &&
@@ -1907,14 +1907,14 @@ bool AcceptToMemoryPool(
     if (tx.IsCoinBase())
         return state.DoS(100, false, REJECT_INVALID, "coinbase");
 
-    // Juno Cash: Mempool policy - reject Orchard-to-transparent (unshielding)
+    // Junocash: Mempool policy - reject Orchard-to-transparent (unshielding)
     // Note: Positive valueBalance means value is flowing OUT of Orchard
     const auto& orchard_bundle = tx.GetOrchardBundle();
     if (orchard_bundle.GetNumActions() > 0 && !tx.vout.empty() && orchard_bundle.GetValueBalance() > 0) {
         return state.DoS(0, false, REJECT_NONSTANDARD, "juno-no-unshield");
     }
 
-    // Juno Cash: Mempool policy - reject transparent-to-transparent (must shield)
+    // Junocash: Mempool policy - reject transparent-to-transparent (must shield)
     // Exception: Coinbase transactions are allowed (already checked above)
     if (!tx.vin.empty() && !tx.vout.empty()) {
         // If valueBalance >= 0, funds are not going into Orchard (not shielding)
@@ -2372,7 +2372,7 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
         return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
     }
 
-    // Juno Cash: Blocks on disk were already validated when stored
+    // Junocash: Blocks on disk were already validated when stored
     // RandomX validation requires context (pindexPrev) which we don't have here
     // Legacy Equihash check removed - blocks on disk are assumed valid
 
@@ -3286,7 +3286,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             // The genesis block contained no JoinSplits
             pindex->hashFinalSproutRoot = pindex->hashSproutAnchor;
 
-            // Juno Cash: Initialize Sapling and Orchard roots for genesis block
+            // Junocash: Initialize Sapling and Orchard roots for genesis block
             SaplingMerkleTree sapling_tree;
             OrchardMerkleFrontier orchard_tree;
 
@@ -3297,7 +3297,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 pindex->hashFinalOrchardRoot = OrchardMerkleFrontier::empty_root();
             }
 
-            // Juno Cash: Push anchors to view to initialize anchor database
+            // Junocash: Push anchors to view to initialize anchor database
             view.PushAnchor(sprout_tree);
             view.PushAnchor(sapling_tree);
             view.PushAnchor(orchard_tree);
@@ -3382,7 +3382,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     std::vector<CAddressUnspentDbEntry> addressUnspentIndex;
     std::vector<CSpentIndexDbEntry> spentIndex;
 
-    // Juno Cash: Sprout is never used, tree is always empty.
+    // Junocash: Sprout is never used, tree is always empty.
     // Use empty_root() directly instead of GetBestAnchor() which may return
     // corrupt data from database during rescan/reindex.
     auto old_sprout_tree_root = SproutMerkleTree::empty_root();
@@ -3393,7 +3393,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     SproutMerkleTree sprout_tree;
     assert(view.GetSproutAnchorAt(old_sprout_tree_root, sprout_tree));
 
-    // Juno Cash: Sapling is never used, tree is always empty.
+    // Junocash: Sapling is never used, tree is always empty.
     SaplingMerkleTree sapling_tree;
     assert(view.GetSaplingAnchorAt(SaplingMerkleTree::empty_root(), sapling_tree));
 
@@ -3981,7 +3981,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             pindex->nStatus |= BLOCK_ACTIVATES_UPGRADE;
             pindex->nCachedBranchId = CurrentEpochBranchId(pindex->nHeight, consensusParams);
         } else if (pindex->pprev) {
-            // Juno Cash: pprev might not have nCachedBranchId set if it was just loaded
+            // Junocash: pprev might not have nCachedBranchId set if it was just loaded
             // from disk (LoadBlockIndex sets it, but ConnectBlock might run first on restart)
             if (pindex->pprev->nCachedBranchId) {
                 pindex->nCachedBranchId = pindex->pprev->nCachedBranchId;
@@ -6447,7 +6447,7 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
         // validity status because it is side-loaded into a fresh chain.
         // Activation blocks will have branch IDs set (read from disk).
         //
-        // Juno Cash: Database migration fix - ensure BLOCK_ACTIVATES_UPGRADE flag
+        // Junocash: Database migration fix - ensure BLOCK_ACTIVATES_UPGRADE flag
         // is correct for all blocks. Old databases may have missing or incorrect
         // flags. For branchIds, only set if missing - if a stored branchId differs
         // from expected, let RewindBlockIndex handle revalidation (don't silently
@@ -6569,49 +6569,49 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
         return true;
     chainActive.SetTip(it->second);
 
-    // Juno Cash: Initialize genesis block anchor roots if loading from disk
+    // Junocash: Initialize genesis block anchor roots if loading from disk
     // and ensure they exist in the database
     const Consensus::Params& genesisConsensus = chainparams.GetConsensus();
     CBlockIndex* genesis = chainActive[0];
     if (genesis && genesisConsensus.NetworkUpgradeActive(0, Consensus::UPGRADE_NU5)) {
         if (genesis->hashFinalOrchardRoot.IsNull()) {
             genesis->hashFinalOrchardRoot = OrchardMerkleFrontier::empty_root();
-            LogPrintf("Juno Cash: Initialized genesis block Orchard root to empty_root\n");
+            LogPrintf("Junocash: Initialized genesis block Orchard root to empty_root\n");
         }
         // Ensure the empty anchor exists in the database
         OrchardMerkleFrontier tree;
         if (!pcoinsTip->GetOrchardAnchorAt(genesis->hashFinalOrchardRoot, tree)) {
             pcoinsTip->PushAnchor(OrchardMerkleFrontier());
-            LogPrintf("Juno Cash: Pushed genesis Orchard anchor to database\n");
+            LogPrintf("Junocash: Pushed genesis Orchard anchor to database\n");
         }
     }
     if (genesis && genesisConsensus.NetworkUpgradeActive(0, Consensus::UPGRADE_SAPLING)) {
         if (genesis->hashFinalSaplingRoot.IsNull()) {
             genesis->hashFinalSaplingRoot = SaplingMerkleTree::empty_root();
-            LogPrintf("Juno Cash: Initialized genesis block Sapling root to empty_root\n");
+            LogPrintf("Junocash: Initialized genesis block Sapling root to empty_root\n");
         }
         // Ensure the empty anchor exists in the database
         SaplingMerkleTree tree;
         if (!pcoinsTip->GetSaplingAnchorAt(genesis->hashFinalSaplingRoot, tree)) {
             pcoinsTip->PushAnchor(SaplingMerkleTree());
-            LogPrintf("Juno Cash: Pushed genesis Sapling anchor to database\n");
+            LogPrintf("Junocash: Pushed genesis Sapling anchor to database\n");
         }
     }
 
     // Set hashFinalSproutRoot for the end of best chain
     it->second->hashFinalSproutRoot = pcoinsTip->GetBestAnchor(SPROUT);
 
-    // Juno Cash: Also set Sapling and Orchard roots for the best block from database
+    // Junocash: Also set Sapling and Orchard roots for the best block from database
     // and verify the anchors actually exist (defensive check for database inconsistency)
     if (genesisConsensus.NetworkUpgradeActive(it->second->nHeight, Consensus::UPGRADE_SAPLING)) {
         uint256 saplingAnchor = pcoinsTip->GetBestAnchor(SAPLING);
         SaplingMerkleTree saplingTree;
         if (pcoinsTip->GetSaplingAnchorAt(saplingAnchor, saplingTree)) {
             it->second->hashFinalSaplingRoot = saplingAnchor;
-            LogPrintf("Juno Cash: Set best block Sapling root from database: %s\n", it->second->hashFinalSaplingRoot.ToString());
+            LogPrintf("Junocash: Set best block Sapling root from database: %s\n", it->second->hashFinalSaplingRoot.ToString());
         } else {
             // Anchor doesn't exist in database - use empty_root
-            LogPrintf("Juno Cash: WARNING - Best Sapling anchor %s not found in database, using empty_root\n", saplingAnchor.ToString());
+            LogPrintf("Junocash: WARNING - Best Sapling anchor %s not found in database, using empty_root\n", saplingAnchor.ToString());
             it->second->hashFinalSaplingRoot = SaplingMerkleTree::empty_root();
             pcoinsTip->PushAnchor(SaplingMerkleTree());
         }
@@ -6621,10 +6621,10 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
         OrchardMerkleFrontier orchardTree;
         if (pcoinsTip->GetOrchardAnchorAt(orchardAnchor, orchardTree)) {
             it->second->hashFinalOrchardRoot = orchardAnchor;
-            LogPrintf("Juno Cash: Set best block Orchard root from database: %s\n", it->second->hashFinalOrchardRoot.ToString());
+            LogPrintf("Junocash: Set best block Orchard root from database: %s\n", it->second->hashFinalOrchardRoot.ToString());
         } else {
             // Anchor doesn't exist in database - use empty_root
-            LogPrintf("Juno Cash: WARNING - Best Orchard anchor %s not found in database, using empty_root\n", orchardAnchor.ToString());
+            LogPrintf("Junocash: WARNING - Best Orchard anchor %s not found in database, using empty_root\n", orchardAnchor.ToString());
             it->second->hashFinalOrchardRoot = OrchardMerkleFrontier::empty_root();
             pcoinsTip->PushAnchor(OrchardMerkleFrontier());
         }

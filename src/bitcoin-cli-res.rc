@@ -16,8 +16,8 @@ BEGIN
     BEGIN
         BLOCK "040904E4" // U.S. English - multilingual (hex)
         BEGIN
-            VALUE "CompanyName",        "Juno Cash"
-            VALUE "FileDescription",    "junocash-cli (JSON-RPC client for Juno Cash)"
+            VALUE "CompanyName",        "Junocash"
+            VALUE "FileDescription",    "junocash-cli (JSON-RPC client for Junocash)"
             VALUE "FileVersion",        VER_FILEVERSION_STR
             VALUE "InternalName",       "junocash-cli"
             VALUE "LegalCopyright",     COPYRIGHT_STR

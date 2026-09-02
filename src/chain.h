@@ -19,7 +19,7 @@
 
 #include <rust/metrics.h>
 
-// Juno Cash: Always write all block index data in latest format.
+// Junocash: Always write all block index data in latest format.
 // Set all version thresholds to 0 so version checks always pass.
 // (Original Zcash values were much higher than Juno's CLIENT_VERSION,
 // causing NU5/NU6 data like hashFinalOrchardRoot to never be persisted)
@@ -29,7 +29,7 @@ static const int CHAIN_HISTORY_ROOT_VERSION = 0;
 static const int NU5_DATA_VERSION = 0;
 static const int TRANSPARENT_VALUE_VERSION = 0;
 static const int NU6_DATA_VERSION = 0;
-// Juno Cash: Always persist nCachedBranchId for all validated blocks,
+// Junocash: Always persist nCachedBranchId for all validated blocks,
 // not just activation blocks, to prevent chain rewinding on restart
 static const int BRANCH_ID_ALWAYS_VERSION = 0;
 
@@ -640,7 +640,7 @@ public:
             READWRITE(nLockboxValue);
         }
 
-        // Juno Cash: For validated blocks that are NOT activation blocks, persist
+        // Junocash: For validated blocks that are NOT activation blocks, persist
         // nCachedBranchId to prevent chain rewinding on restart. On read, if we
         // don't have a cached branch ID from the BLOCK_ACTIVATES_UPGRADE path above,
         // read it from this position (for blocks written by this version or later).

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup DMI/SMBIOS read permissions for Juno Cash
+# Setup DMI/SMBIOS read permissions for Junocash
 # This script configures system permissions to allow non-root users to read
 # hardware information (CPU, memory, motherboard) via DMI/SMBIOS tables.
 #
@@ -112,7 +112,7 @@ echo
 echo "After logging back in, verify with: groups"
 echo "You should see 'dmi' in your groups list."
 echo
-echo "Then Juno Cash will automatically detect hardware information!"
+echo "Then Junocash will automatically detect hardware information!"
 echo
 
 exit 0

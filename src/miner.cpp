@@ -1,13 +1,13 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Copyright (c) 2016-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 #include "miner.h"
 #ifdef ENABLE_MINING
-// Juno Cash: Legacy Equihash - kept for reference
+// Junocash: Legacy Equihash - kept for reference
 // #include "pow/tromp/equi_miner.h"
 #include "crypto/randomx_wrapper.h"
 #include "crypto/randomx_msr.h"
@@ -24,7 +24,7 @@
 #include "consensus/upgrades.h"
 #include "consensus/validation.h"
 #ifdef ENABLE_MINING
-// Juno Cash: Legacy Equihash - kept for reference
+// Junocash: Legacy Equihash - kept for reference
 // #include "crypto/equihash.h"
 #endif
 #include "hash.h"
@@ -896,13 +896,13 @@ static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainpar
     {
         LOCK(cs_main);
         if (pblock->hashPrevBlock != chainActive.Tip()->GetBlockHash())
-            return error("JunoCashMiner: generated block is stale");
+            return error("JunocashMiner: generated block is stale");
     }
 
     // Process this block the same as if we had received it from another node
     CValidationState state;
     if (!ProcessNewBlock(state, chainparams, NULL, pblock, true, NULL))
-        return error("JunoCashMiner: ProcessNewBlock, block not accepted");
+        return error("JunocashMiner: ProcessNewBlock, block not accepted");
 
     TrackMinedBlock(pblock->GetHash());
 
@@ -1382,14 +1382,14 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
     {
         miningTimer.stop();
         c.disconnect();
-        LogPrintf("JunoCashMiner terminated\n");
+        LogPrintf("JunocashMiner terminated\n");
         throw;
     }
     catch (const std::runtime_error &e)
     {
         miningTimer.stop();
         c.disconnect();
-        LogPrintf("JunoCashMiner runtime error: %s\n", e.what());
+        LogPrintf("JunocashMiner runtime error: %s\n", e.what());
         return;
     }
     miningTimer.stop();

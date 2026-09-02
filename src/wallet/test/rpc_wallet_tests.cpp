@@ -1568,7 +1568,7 @@ BOOST_AUTO_TEST_CASE(rpc_z_shieldcoinbase_parameters)
     ), runtime_error);
 
     // Test constructor of AsyncRPCOperation_shieldcoinbase
-    // Juno Cash only supports Orchard addresses, so Sprout addresses must be rejected
+    // Junocash only supports Orchard addresses, so Sprout addresses must be rejected
     KeyIO keyIO(Params());
     WalletTxBuilder builder(Params(), minRelayTxFee);
     UniValue retValue;

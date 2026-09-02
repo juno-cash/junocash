@@ -1,5 +1,5 @@
 // Copyright (c) 2016-2023 The Zcash developers
-// Copyright (c) 2025 Juno Cash developers
+// Copyright (c) 2025 Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -3965,7 +3965,7 @@ void ThreadBenchmarkMining()
 
     // Write header with system information
     benchmarkLog << "========================================\n";
-    benchmarkLog << "JunoCash Mining Benchmark\n";
+    benchmarkLog << "Junocash Mining Benchmark\n";
     benchmarkLog << "========================================\n";
     benchmarkLog << "Date: " << DateTimeStrFormat("%Y-%m-%d %H:%M:%S", GetTime()) << "\n";
     benchmarkLog << "Version: " << FormatFullVersion() << "\n";
@@ -4468,7 +4468,7 @@ void ThreadShowMetricsScreen()
 
             // Draw header every frame
             drawBoxTop("");
-            drawCentered("Juno Cash", "\e[1;33m");
+            drawCentered("Junocash", "\e[1;33m");
             drawCentered("Private Money", "\e[1;36m");
             drawCentered(FormatFullVersion() + " - " + WhichNetwork() + " - RandomX", "\e[0;37m");
             drawBoxBottom();

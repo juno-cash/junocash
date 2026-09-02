@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup MSR (Model Specific Register) permissions for Juno Cash
+# Setup MSR (Model Specific Register) permissions for Junocash
 # This script configures system permissions to allow non-root users to access
 # CPU MSR registers for RandomX mining performance optimizations.
 #
@@ -243,7 +243,7 @@ if [ "$SUCCESS" = false ]; then
     echo
 fi
 
-echo -e "${GREEN}Juno Cash can now use MSR optimizations for maximum mining performance!${NC}"
+echo -e "${GREEN}Junocash can now use MSR optimizations for maximum mining performance!${NC}"
 echo
 
 exit 0

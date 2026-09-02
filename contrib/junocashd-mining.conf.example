@@ -1,4 +1,4 @@
-# Juno Cash Mining Configuration Example
+# Junocash Mining Configuration Example
 # Copy these settings to ~/.junocash/junocashd.conf for optimal mining
 #
 # After running: sudo contrib/setup-mining-permissions.sh

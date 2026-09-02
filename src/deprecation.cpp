@@ -1,5 +1,5 @@
 // Copyright (c) 2017-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -30,7 +30,7 @@ bool fEnableWalletTxVJoinSplit = true;
 bool fEnableFundRawTransaction = true;
 bool fEnableKeyPoolRefill = true;
 bool fEnableSetTxFee = true;
-// Juno Cash: transparent send operations
+// Junocash: transparent send operations
 bool fEnableSendToAddress = true;
 bool fEnableSendMany = true;
 bool fEnableListTransactions = true;
@@ -63,7 +63,7 @@ void EnforceNodeDeprecation(const CChainParams& params, int nHeight, bool forceL
         if (blocksToDeprecation == 0 || forceLogging) {
             auto msg = strprintf(_("This version has been deprecated as of block height %d."),
                                  DEPRECATION_HEIGHT) + " " +
-                       _("You should upgrade to the latest version of Juno Cash.");
+                       _("You should upgrade to the latest version of Junocash.");
             LogPrintf("*** %s\n", msg);
             CAlert::Notify(msg, fThread);
             uiInterface.ThreadSafeMessageBox(msg, "", CClientUIInterface::MSG_ERROR);
@@ -73,7 +73,7 @@ void EnforceNodeDeprecation(const CChainParams& params, int nHeight, bool forceL
                (blocksToDeprecation < DEPRECATION_WARN_LIMIT && forceLogging)) {
         std::string msg = strprintf(_("This version will be deprecated at block height %d, and will automatically shut down."),
                             DEPRECATION_HEIGHT) + " " +
-                  _("You should upgrade to the latest version of Juno Cash.");
+                  _("You should upgrade to the latest version of Junocash.");
         LogPrintf("*** %s\n", msg);
         CAlert::Notify(msg, fThread);
         uiInterface.ThreadSafeMessageBox(msg, "", CClientUIInterface::MSG_WARNING);
@@ -123,7 +123,7 @@ std::optional<std::string> LoadAllowedDeprecatedFeatures() {
     fEnableZGetTotalBalance = allowdeprecated.count("z_gettotalbalance") > 0;
     fEnableZListAddresses = allowdeprecated.count("z_listaddresses") > 0;
     fEnableWalletTxVJoinSplit = allowdeprecated.count("wallettxvjoinsplit") > 0;
-    // Juno Cash: transparent send operations
+    // Junocash: transparent send operations
     fEnableSendToAddress = allowdeprecated.count("sendtoaddress") > 0;
     fEnableSendMany = allowdeprecated.count("sendmany") > 0;
     fEnableListTransactions = allowdeprecated.count("listtransactions") > 0;

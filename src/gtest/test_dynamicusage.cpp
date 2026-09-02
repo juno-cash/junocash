@@ -54,7 +54,7 @@ TEST(RecursiveDynamicUsageTests, TestTransactionJoinSplit)
 
 TEST(RecursiveDynamicUsageTests, TestTransactionSaplingToSapling)
 {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -81,7 +81,7 @@ TEST(RecursiveDynamicUsageTests, TestTransactionSaplingToSapling)
 
 TEST(RecursiveDynamicUsageTests, TestTransactionTransparentToSapling)
 {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();
@@ -109,7 +109,7 @@ TEST(RecursiveDynamicUsageTests, TestTransactionTransparentToSapling)
 
 TEST(RecursiveDynamicUsageTests, TestTransactionSaplingToTransparent)
 {
-    GTEST_SKIP() << "Juno Cash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
+    GTEST_SKIP() << "Junocash is Orchard-only: Sapling/Sprout proving is disabled and its zk-SNARK parameters are not loaded.";
     LoadProofParameters();
 
     auto consensusParams = RegtestActivateSapling();

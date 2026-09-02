@@ -1,6 +1,6 @@
-# Juno Cash Mining Setup Scripts
+# Junocash Mining Setup Scripts
 
-This directory contains scripts to configure your Linux system for optimal Juno Cash mining performance.
+This directory contains scripts to configure your Linux system for optimal Junocash mining performance.
 
 ## Quick Start (Recommended)
 
@@ -47,7 +47,7 @@ sudo ./setup-dmi-permissions.sh [username]
 - Creates a `dmi` group
 - Adds your user to the `dmi` group
 - Creates udev rules to allow reading DMI/SMBIOS tables
-- Allows Juno Cash to display hardware information in mining status
+- Allows Junocash to display hardware information in mining status
 
 **Benefits:**
 - Shows CPU model, memory configuration, motherboard info
@@ -320,7 +320,7 @@ sudo udevadm control --reload-rules
 
 **Why it's generally safe:**
 - Limited to specific performance registers
-- Juno Cash only modifies mining-related MSR registers
+- Junocash only modifies mining-related MSR registers
 - Original values are saved and restored
 - No permanent changes to system
 - User is already trusted (in sudo group)
@@ -473,4 +473,4 @@ For issues or questions:
 
 **Document Version**: 1.0
 **Last Updated**: 2025-12-07
-**Maintained By**: Juno Cash Development Team
+**Maintained By**: Junocash Development Team

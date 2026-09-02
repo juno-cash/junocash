@@ -115,7 +115,7 @@ default-features = false
 features = ["ansi", "env-filter", "fmt", "time"]
 
 [patch.crates-io]
-# Juno Cash forks zcash_protocol to use 'j' unified-address HRP prefixes
+# Junocash forks zcash_protocol to use 'j' unified-address HRP prefixes
 # (jregtest/jtest/j...). Keep this patch in sync with the version required above.
 zcash_protocol = { path = "./crates/zcash_protocol" }
 

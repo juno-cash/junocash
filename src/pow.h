@@ -24,7 +24,7 @@ unsigned int CalculateNextWorkRequired(arith_uint256 bnAvg,
                                        int nextHeight);
 
 /** Check whether the Equihash solution in a block header is valid */
-// Juno Cash: Legacy Equihash - kept for reference
+// Junocash: Legacy Equihash - kept for reference
 bool CheckEquihashSolution(const CBlockHeader *pblock, const Consensus::Params&);
 
 /** Check whether the RandomX solution in a block header is valid */

@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Copyright (c) 2016-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -960,7 +960,7 @@ static bool AttemptToEvictConnection(bool fPreferNewConnection) {
         }
     }
 
-    // Juno Cash: Preferential peering for block 40000 lockin
+    // Junocash: Preferential peering for block 40000 lockin
     const int ORCHARD_TRANSPARENT_LOCK_HEIGHT = 40000;
     const int ORCHARD_TRANSPARENT_LOCK_PROTOCOL = 170141;
     // 4320 blocks = 3 days at 60-second blocks (matches Zcash's 3-day window)
@@ -1844,7 +1844,7 @@ bool BindListenPort(const CService &addrBind, string& strError, bool fWhiteliste
     {
         int nErr = WSAGetLastError();
         if (nErr == WSAEADDRINUSE)
-            strError = strprintf(_("Unable to bind to %s on this computer. Juno Cash is probably already running."), addrBind.ToString());
+            strError = strprintf(_("Unable to bind to %s on this computer. Junocash is probably already running."), addrBind.ToString());
         else
             strError = strprintf(_("Unable to bind to %s on this computer (bind returned error %s)"), addrBind.ToString(), NetworkErrorString(nErr));
         LogPrintf("%s\n", strError);

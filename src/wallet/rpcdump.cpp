@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Copyright (c) 2016-2023 The Zcash developers
-// Copyright (c) 2025 The Juno Cash developers
+// Copyright (c) 2025 The Junocash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -252,7 +252,7 @@ UniValue importaddress(const UniValue& params, bool fHelp)
         std::vector<unsigned char> data(ParseHex(params[0].get_str()));
         ImportScript(CScript(data.begin(), data.end()), strLabel, fP2SH);
     } else {
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Juno Cash address or script");
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Junocash address or script");
     }
 
     if (fRescan)
@@ -404,7 +404,7 @@ UniValue importwallet_impl(const UniValue& params, bool fImportZKeys)
         if (vstr.size() < 2)
             continue;
 
-        // Let's see if the address is a valid Juno Cash spending key
+        // Let's see if the address is a valid Junocash spending key
         if (fImportZKeys) {
             auto spendingkey = keyIO.DecodeSpendingKey(vstr[0]);
             int64_t nTime = DecodeDumpTime(vstr[1]);
@@ -423,7 +423,7 @@ UniValue importwallet_impl(const UniValue& params, bool fImportZKeys)
                 continue;
             } else {
                 LogPrint("zrpc", "Importing detected an error: invalid spending key. Trying as a transparent key...\n");
-                // Not a valid spending key, so carry on and see if it's a Juno Cash style t-address.
+                // Not a valid spending key, so carry on and see if it's a Junocash style t-address.
             }
         }
 
@@ -512,7 +512,7 @@ UniValue dumpprivkey(const UniValue& params, bool fHelp)
     std::string strAddress = params[0].get_str();
     CTxDestination dest = keyIO.DecodeDestination(strAddress);
     if (!IsValidDestination(dest)) {
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Juno Cash address");
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Junocash address");
     }
     const CKeyID *keyID = std::get_if<CKeyID>(&dest);
     if (!keyID) {
@@ -594,7 +594,7 @@ UniValue z_exportwallet(const UniValue& params, bool fHelp)
     KeyIO keyIO(Params());
 
     // produce output
-    file << strprintf("# Wallet dump created by Juno Cash %s\n", CLIENT_BUILD);
+    file << strprintf("# Wallet dump created by Junocash %s\n", CLIENT_BUILD);
     file << strprintf("# * Created on %s\n", EncodeDumpTime(GetTime()));
     file << strprintf("# * Best block at time of backup was %i (%s),\n", chainActive.Height(), chainActive.Tip()->GetBlockHash().ToString());
     file << strprintf("#   mined on %s\n", EncodeDumpTime(chainActive.Tip()->GetBlockTime()));

@@ -1,4 +1,4 @@
-# Juno Cash Mining - Quick Start Guide
+# Junocash Mining - Quick Start Guide
 
 ## TL;DR - Get Maximum Performance in 3 Steps
 

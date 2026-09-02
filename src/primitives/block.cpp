@@ -34,7 +34,7 @@ uint256 DeriveBlockCommitmentsHash(
 
 uint256 CBlockHeader::GetHash() const
 {
-    // Juno Cash: For RandomX blocks, the block hash is the RandomX hash stored in
+    // Junocash: For RandomX blocks, the block hash is the RandomX hash stored in
     // nSolution. This is the identity the deployed chain was built on (genesis and
     // all checkpoints/commitments are keyed to it), so it cannot change without a
     // consensus hard fork.

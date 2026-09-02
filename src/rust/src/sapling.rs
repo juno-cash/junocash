@@ -717,7 +717,7 @@ impl BatchValidator {
     /// bundle validity cache.
     pub(crate) fn validate(&mut self) -> bool {
         if let Some(inner) = self.0.take() {
-            // Juno Cash: Sapling is banned at consensus level, so parameters may not be loaded.
+            // Junocash: Sapling is banned at consensus level, so parameters may not be loaded.
             // If parameters are not loaded, this should only be called with an empty validator.
             // Return true for empty validator (no bundles to validate).
             let spend_vk = SAPLING_SPEND_VK.get();

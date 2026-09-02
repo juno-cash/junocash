@@ -3,7 +3,7 @@
 export LC_ALL=C
 set -eu
 
-# JunoCash Multi-Platform Release Builder
+# Junocash Multi-Platform Release Builder
 # Builds release binaries for Windows, Linux, and macOS (including Apple Silicon)
 
 # Color output
@@ -91,7 +91,7 @@ usage() {
     cat <<EOF
 Usage: $0 [OPTIONS]
 
-Build JunoCash release binaries for multiple platforms.
+Build Junocash release binaries for multiple platforms.
 
 OPTIONS:
     -w, --windows           Build for Windows (x86_64-w64-mingw32)
@@ -487,12 +487,12 @@ build_platform() {
     esac
 
     # Configure and build
-    print_info "Configuring JunoCash for $PLATFORM_NAME..."
+    print_info "Configuring Junocash for $PLATFORM_NAME..."
     ./zcutil/clean.sh || true
     ./autogen.sh
     CONFIG_SITE="$PWD/depends/$HOST_TRIPLET/share/config.site" ./configure --quiet --disable-tests
 
-    print_info "Building JunoCash for $PLATFORM_NAME..."
+    print_info "Building Junocash for $PLATFORM_NAME..."
     make -j"$JOBS"
 
     print_success "Build complete for $PLATFORM_NAME"
@@ -579,7 +579,7 @@ package_release() {
 
     # Create example config
     cat > "$PKG_DIR/junocash.conf.example" <<'CONFEOF'
-# JunoCash Configuration Example
+# Junocash Configuration Example
 
 # RPC Settings
 #rpcuser=your_username
@@ -706,11 +706,11 @@ create_dmg() {
 
     # Create install instructions
     cat > "$PKG_DIR/INSTALL.txt" <<'INSTALLEOF'
-Juno Cash Installation
+Junocash Installation
 ======================
 
 1. Copy the 'bin' folder to a location of your choice
-   (e.g., /Applications/JunoCash or ~/Applications/JunoCash)
+   (e.g., /Applications/Junocash or ~/Applications/Junocash)
 
 2. Add the bin folder to your PATH, or run binaries directly:
 
@@ -757,7 +757,7 @@ INSTALLEOF
 
 # Main execution
 main() {
-    print_info "JunoCash Multi-Platform Release Builder"
+    print_info "Junocash Multi-Platform Release Builder"
     print_info "Version: $FULL_VERSION"
 
     parse_args "$@"

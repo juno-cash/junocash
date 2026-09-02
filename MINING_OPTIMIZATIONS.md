@@ -1,6 +1,6 @@
-# Juno Cash Mining Optimizations - Complete History
+# Junocash Mining Optimizations - Complete History
 
-This document tracks all RandomX mining performance optimizations implemented in Juno Cash, organized chronologically by commit.
+This document tracks all RandomX mining performance optimizations implemented in Junocash, organized chronologically by commit.
 
 ## Performance Summary
 
@@ -322,4 +322,4 @@ sudo cpupower frequency-set -g performance
 
 **Document Version**: 1.0
 **Last Updated**: 2025-12-07
-**Maintained By**: Juno Cash Development Team
+**Maintained By**: Junocash Development Team

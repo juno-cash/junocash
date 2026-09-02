@@ -47,7 +47,7 @@ static const std::set<std::string> DEFAULT_DENY_DEPRECATED{{
 
     // Wallet-level features
 #ifdef ENABLE_WALLET
-    // Juno Cash: getnewaddress deprecated - use t_getminingaddress for mining
+    // Junocash: getnewaddress deprecated - use t_getminingaddress for mining
     "getnewaddress",
     "getrawchangeaddress",
     "z_getnewaddress",
@@ -55,7 +55,7 @@ static const std::set<std::string> DEFAULT_DENY_DEPRECATED{{
     "z_listaddresses",
     "legacy_privacy",
     "wallettxvjoinsplit",
-    // Juno Cash: transparent send operations deprecated - use z_shieldcoinbase + z_send
+    // Junocash: transparent send operations deprecated - use z_shieldcoinbase + z_send
     "sendtoaddress",
     "sendmany",
     "listtransactions",
@@ -84,7 +84,7 @@ extern bool fEnableWalletTxVJoinSplit;
 extern bool fEnableFundRawTransaction;
 extern bool fEnableKeyPoolRefill;
 extern bool fEnableSetTxFee;
-// Juno Cash: transparent send operations
+// Junocash: transparent send operations
 extern bool fEnableSendToAddress;
 extern bool fEnableSendMany;
 extern bool fEnableListTransactions;

@@ -248,7 +248,7 @@ class MinerAddressScript : public CReserveScript
 // This is only useful if the test changes to require more blocks, but we keep it
 // compiling to avoid bitrot.
 void MineBlockForTest(const CChainParams& chainparams, CBlock* pblock) {
-    // Juno Cash: RandomX-based mining for tests
+    // Junocash: RandomX-based mining for tests
     RandomX_Init();
 
     // Get seed hash for this block height (assuming chainActive is available in test context)

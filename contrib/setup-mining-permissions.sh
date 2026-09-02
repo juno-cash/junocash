@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup all mining-related permissions for Juno Cash
+# Setup all mining-related permissions for Junocash
 # This is a convenience script that runs both DMI and MSR permission setup.
 #
 # Usage: sudo ./setup-mining-permissions.sh [username]
@@ -49,7 +49,7 @@ fi
 
 echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║                                                                   ║${NC}"
-echo -e "${CYAN}║         Juno Cash Mining Permissions Setup (All-in-One)         ║${NC}"
+echo -e "${CYAN}║         Junocash Mining Permissions Setup (All-in-One)         ║${NC}"
 echo -e "${CYAN}║                                                                   ║${NC}"
 echo -e "${CYAN}║  This script will configure your system for optimal mining:      ║${NC}"
 echo -e "${CYAN}║    • DMI/SMBIOS access (hardware detection)                      ║${NC}"
