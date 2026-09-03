@@ -4200,8 +4200,15 @@ void CWallet::SetMnemonicHDChain(const CHDChain& chain, bool memonly)
 bool CWallet::CheckNetworkInfo(std::pair<std::string, std::string> readNetworkInfo) const
 {
     LOCK(cs_wallet);
-    std::pair<string, string> networkInfo(PACKAGE_NAME, networkIdString);
-    return readNetworkInfo == networkInfo;
+    if (readNetworkInfo.second != networkIdString) {
+        return false;
+    }
+    // Wallets written by v0.9.12 and earlier recorded the product name as
+    // "Juno Cash", before it was normalized to "Junocash". Accept the legacy
+    // spelling so those wallets still load; new writes use PACKAGE_NAME.
+    static const std::string LEGACY_PACKAGE_NAME{"Juno Cash"};
+    return readNetworkInfo.first == PACKAGE_NAME ||
+           readNetworkInfo.first == LEGACY_PACKAGE_NAME;
 }
 
 uint32_t CWallet::BIP44CoinType() const {
